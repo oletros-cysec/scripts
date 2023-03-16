@@ -1,0 +1,224 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed!"
+	fi
+}
+
+need_root
+
+########################
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-d 'testing'] (-n) (-k) (-e) (-s) (-m) (-u) (-t)$end
+Details:
+-$cyan -d 'testing'$end: distribution you want
+-$cyan -n$end: enable non-free branch
+-$cyan -k$end: enable kali repository
+-$cyan -e$end: enable element repository
+-$cyan -s$end: enable signal repository
+-$cyan -m$end: enable mega repository
+-$cyan -u$end: enable debian unstable repository
+-$cyan -t$end: enable debian stable repository
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isnonfree=false
+iskali=false
+iselement=false
+issignal=false
+ismega=false
+isunstable=false
+isstable=false
+
+while getopts nkesmutd: flag
+do
+	case "${flag}" in
+		d) distribution=${OPTARG};;
+		n) isnonfree=true;;
+		k) iskali=true;;
+		e) iselement=true;;
+		s) issignal=true;;
+		m) ismega=true;;
+		u) isunstable=true;;
+		t) isstable=true;;
+	esac
+done
+
+if [ "$distribution" == "" ]; then
+	distribution="testing"
+fi
+
+############
+
+status_msg "Init apt config file"
+
+if [ ! -e /etc/apt/sources.list ]; then
+	touch /etc/apt/sources.list
+else
+	echo '' >  /etc/apt/sources.list
+fi
+
+if [ ! -e /etc/apt/apt.conf ]; then
+	touch /etc/apt/apt.conf
+else
+	echo '' >  /etc/apt/apt.conf
+fi
+
+############
+
+status_msg "Disable suggests & recommends"
+
+echo 'APT::Install-Recommends "false";
+APT::Install-Suggests "false";
+APT::Get::Install-Recommends "false";
+APT::Get::Install-Suggests "false";' > /etc/apt/apt.conf
+
+############
+
+status_msg "Configure non-free branch"
+
+if ($isnonfree); then
+	nonfree="non-free"
+	
+	echo 'Package: *
+Pin: release c=non-free
+Pin-Priority: 101' > /etc/apt/preferences.d/non-free
+else
+	nonfree=""
+fi
+
+echo 'Package: *
+Pin: release l=Debian,c=contrib
+Pin-Priority: 101' > /etc/apt/preferences.d/contrib
+
+############
+
+status_msg "Init sources.list"
+
+echo "deb https://deb.debian.org/debian/ $distribution main contrib $nonfree
+deb https://deb.debian.org/debian/ $distribution-updates main contrib $nonfree
+deb https://security.debian.org/debian-security $distribution-security main contrib $nonfree" > /etc/apt/sources.list
+
+############
+
+status_msg "Add repositories"
+
+if ($isunstable); then
+	echo 'Package: *
+Pin: release a=unstable
+Pin-Priority: 101' > /etc/apt/preferences.d/unstable
+	
+	echo "
+# Unstable
+deb https://deb.debian.org/debian/ unstable main contrib" >> /etc/apt/sources.list
+fi
+
+if ($isstable); then
+	echo 'Package: *
+Pin: release a=stable
+Pin-Priority: 101' > /etc/apt/preferences.d/stable
+	
+	echo "
+# Stable
+deb https://deb.debian.org/debian/ stable main contrib" >> /etc/apt/sources.list
+fi
+
+if ($iskali); then
+	echo 'Package: *
+Pin: release o=Kali
+Pin-Priority: 101' > /etc/apt/preferences.d/kali
+	
+	echo "
+# Kali
+deb https://http.kali.org/kali kali-rolling main contrib" >> /etc/apt/sources.list
+	
+	gpg --recv-key ED444FF07D8D0BF6
+	gpg --keyserver pgp.mit.edu --recv-key ED444FF07D8D0BF6
+	gpg --keyserver pool.sks-keyservers.net --recv-key ED444FF07D8D0BF6
+	gpg --keyserver keyserver.ubuntu.com --recv-key ED444FF07D8D0BF6
+	gpg -a --export ED444FF07D8D0BF6 | apt-key add -
+	
+	apt update && apt install --force-yes -y kali-archive-keyring
+fi
+
+if ($iselement); then
+	wget -q --show-progress -O /usr/share/keyrings/element-io-archive-keyring.gpg https://packages.element.io/debian/element-io-archive-keyring.gpg
+	
+	echo 'Package: *
+Pin: origin packages.element.io
+Pin-Priority: 101' > /etc/apt/preferences.d/element
+	
+	echo "
+# Element
+deb [signed-by=/usr/share/keyrings/element-io-archive-keyring.gpg] https://packages.element.io/debian/ default main" >> /etc/apt/sources.list
+fi
+
+if ($issignal); then
+	wget -O- https://updates.signal.org/desktop/apt/keys.asc | gpg --dearmor > /tmp/signal-desktop-keyring.gpg
+	cat /tmp/signal-desktop-keyring.gpg | tee -a /usr/share/keyrings/signal-desktop-keyring.gpg > /dev/null
+	
+	if [ -e /tmp/signal-desktop-keyring.gpg ]; then
+		rm /tmp/signal-desktop-keyring.gpg
+	fi
+
+	echo 'Package: *
+Pin: origin updates.signal.org
+Pin-Priority: 101' > /etc/apt/preferences.d/signal
+	
+	echo "
+# Signal
+deb [arch=amd64 signed-by=/usr/share/keyrings/signal-desktop-keyring.gpg] https://updates.signal.org/desktop/apt xenial main" >> /etc/apt/sources.list
+fi
+
+if ($ismega); then
+	echo 'Package: *
+Pin: origin mega.nz
+Pin-Priority: 101' > /etc/apt/preferences.d/mega
+	
+	echo "
+# Mega
+deb [signed-by=/usr/share/keyrings/meganz-archive-keyring.gpg] https://mega.nz/linux/repo/Debian_testing/ ./" >> /etc/apt/sources.list
+fi
+
+############
+
+apt update
+
+############
+
+status_msg "Done"
+exit 0

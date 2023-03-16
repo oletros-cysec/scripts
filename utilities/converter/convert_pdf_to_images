@@ -1,0 +1,103 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+install_dep() {
+	checkdep=`which pdftoppm`
+	if [ "$checkdep" == "" ]; then
+		error_msg "Install manually poppler-utils"
+	fi
+}
+
+install_dep
+
+############
+
+cvtfolder() {
+	find "$1" -depth -type f -name '*.PDF' -exec rename "s;\.PDF;\.pdf;g" "{}" \;
+	
+	i=1
+	for file in `find "$1" -type f -name '*.pdf'`
+	do
+		folder=`dirname "$file"`
+		
+		pdftoppm -png "$file" "$folder"/$i
+		
+		let i=i+1
+	done
+	
+	exiftool -v -all:all= -r -overwrite_original "$1"/*
+}
+
+cvtfile() {
+	rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+	
+	folder=`dirname "$1"`
+	
+	pdftoppm -png "$1" "$folder"/$rndstr
+	exiftool -v -all:all= -r -overwrite_original "$folder"/*
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-f|-d 'document.pdf'|'docs/'] $end
+Details:
+-$cyan -f|-d 'document.pdf'|'docs/'$end: you must choose a simple pdf or a folder with pdf
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+while getopts f:d: flag
+do
+	case "${flag}" in
+		f) thefile=${OPTARG};;
+		d) thefolder=${OPTARG};;
+	esac
+done
+
+############
+
+status_msg "Proceed the deletion of metadatas"
+
+if [ -e "$thefile" ]; then
+	cvtfile "$thefile"
+fi
+
+if [ -d "$thefolder" ]; then
+	cvtfolder "$thefolder"
+fi
+
+############
+
+status_msg "Done"
+exit 0

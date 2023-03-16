@@ -1,0 +1,194 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+status_error() {
+	echo -e "$red""$1""$end"
+}
+
+status_success() {
+	echo -e "$green""$1""$end"
+}
+
+status_info() {
+	echo -e "$cyan""$1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-d '/dev/sda'] [-r 4] [-z 1] $end
+Details:
+-$cyan -d '/dev/sda'$end: you must define the mountpoint here
+-$cyan -r 4$end: here the number of random passes. default value is 4
+-$cyan -z 1$end: here the number of zero passes. default value is 1
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+israndom=false
+iszero=false
+
+while getopts d:r:z: flag
+do
+	case "${flag}" in
+		d) devicepoint=${OPTARG};;
+		r) israndom=true; randompasses=${OPTARG};;
+		z) iszero=true; randomzero=${OPTARG};;
+	esac
+done
+
+status_msg "Check parameters"
+
+checkdevicepoint=`fdisk -l | grep "$devicepoint"`
+if [ "$checkdevicepoint" == "" ]; then
+	error_msg "Mountpoint not known!"
+if
+
+if [[ $randompasses =~ ^[\-0-9]+$ ]] && (( randompasses > -1 )) && [ "$randompasses" != "" ]; then
+	randompasses="$randompasses"
+else
+	randompasses="4"
+fi
+
+if [[ $randomzero =~ ^[\-0-9]+$ ]] && (( randomzero > 0 )) && [ "$randomzero" != "" ]; then
+	randomzero="$randomzero"
+else
+	randomzero="1"
+fi
+
+############
+
+install_dep() {
+	checkdep=`which hdparm`
+	if [ "$checkdep" == "" ]; then
+		apt install hdparm
+	fi
+}
+
+install_dep
+
+############
+
+status_msg "Verification of Frozen Status"
+
+actualstatefrozen=`hdparm -I "$devicepoint" | grep -A8 'Security:' | grep 'frozen' | grep 'not'`
+if [ "$actualstatefrozen" == "" ]; then
+	status_error "Status: yes"
+	isfrozen=true
+else
+	status_success "Status: no"
+	isfrozen=false
+fi
+
+if ($isfrozen); then
+	status_info "This process will put your computer in sleep mode in 10 seconds. Just awake it!"
+	sleep 10
+	
+	echo -n mem > /sys/power/state
+fi
+
+actualstatefrozen=`hdparm -I "$devicepoint" | grep -A8 'Security:' | grep 'frozen' | grep 'not'`
+if [ "$actualstatefrozen" == "" ]; then
+	status_error "Auto process failed"
+	error_msg "Do it manually!"
+	
+else
+	status_success "Auto process succeed"
+fi
+
+############
+
+status_msg "Verification of HPA Status"
+
+actualstatehpa=`hdparm -N "$devicepoint" | grep 'disabled'`
+if [ "$actualstatehpa" == "" ]; then
+	status_error "Status: yes"
+	ishpa=true
+else
+	status_success "Status: no"
+	ishpa=false
+fi
+
+if ($ishpa); then
+	maxsize=`hdparm -N "$devicepoint" | grep HPA | cut -d'/' -f2 | cut -d',' -f1`
+	hdparm -N "$maxsize" "$devicepoint"
+fi
+
+actualstatehpa=`hdparm -N "$devicepoint" | grep 'disabled'`
+if [ "$actualstatehpa" == "" ]; then
+	status_error "Auto process failed"
+	error_msg "Do it manually!"
+	
+else
+	status_success "Auto process succeed"
+fi
+
+############
+
+status_msg "Modification of security"
+
+hdparm --user-master z --security-set-pass z "$devicepoint"
+hdparm --user-master z --security-erase z "$devicepoint"
+
+############
+
+status_msg "Launch secure deletion process"
+
+i=1
+while [ "$i" -le "$randompasses" ]
+do
+	status_info "Random pass $i on $randompasses"
+	dd if=/dev/urandom of="$devicepoint"
+	let i=i+1
+done
+
+j=1
+while [ "$j" -le "$randomzero" ]
+do
+	status_info "Zero pass $i on $randomzero"
+	dd if=/dev/zero of="$devicepoint"
+	let j=j+1
+done
+
+############
+
+status_msg "Done"
+exit 0

@@ -1,0 +1,88 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+install_dep() {
+	checkinitscripts=`dpkg -s initscripts | grep 'install ok installed'`
+	if [ "$checkinitscripts" == "" ]; then
+		apt install iniscripts
+	fi
+}
+
+install_dep
+
+############
+
+status_msg "Delete old script if exists"
+
+if [ -e /etc/init.d/harden-hostname ]; then
+	rm -f /etc/init.d/harden-hostname
+	update-rc.d harden-hostname remove
+fi
+
+############
+
+status_msg "Create init script"
+
+echo '#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          harden-hostname
+# Required-Start:    mountkernfs $local_fs urandom
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Harden Hostname
+# Description:       Randomization of hostname
+### END INIT INFO
+
+nomhost=`cat /etc/hostname`
+rnd=`echo $[$RANDOM%7+6]`
+pass=`tr -dc "A-Z0-9" < /dev/urandom | head -c"$rnd"`
+
+echo "$pass" > /etc/hostname
+sed -i -e "s/$nomhost/$pass/g" /etc/hosts
+hostnamectl set-hostname "$pass"
+
+exit 0' > /etc/init.d/harden-hostname
+
+status_msg "Enable script"
+
+chmod +x /etc/init.d/harden-hostname
+update-rc.d harden-hostname defaults
+
+############
+
+status_msg "Done"
+exit 0

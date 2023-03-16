@@ -1,0 +1,57 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-n 'Private Zone'] [-r '/home/my-awesome.website'] [-u 'admin'] [-p 'YbVWPm3QZRDa2xAh']$end
+Details:
+-$cyan -n 'Private Zone'$end: name of the htaccess zone
+-$cyan -r '/home/my-awesome.website'$end: directory where the file will be placed
+-$cyan -u 'admin'$end: username of the htaccess user
+-$cyan -p 'YbVWPm3QZRDa2xAh'$end: password of the htaccess user
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+while getopts n:r:u:p: flag
+do
+	case "${flag}" in
+		n) name=${OPTARG};;
+		r) directory=${OPTARG};;
+		u) username=${OPTARG};;
+		p) password=${OPTARG};;
+	esac
+done
+
+############
+
+echo "AuthType Basic
+AuthName \"$name\"
+AuthUserFile $directory/.htpasswd
+Require valid-user" > htaccess
+
+htpasswd -nb "$username" "$password" >> htpasswd
+
+############
+
+exit 0

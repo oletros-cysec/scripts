@@ -1,0 +1,142 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rnd=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+############
+
+get_user_agent() {
+	uadefault=false
+	uaff=""
+	useragent=""
+	
+	checkesrfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-esr' | head -1`
+	checknightlyfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-nightly' | head -1`
+	
+	if [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="esr"
+	elif [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="nightly"
+	else
+		uadefault=true
+	fi
+	
+	if [ "$uaff" == "esr" ]; then
+		esrprefs="$checkesrfolder/prefs.js"
+		esrchekuaprefs=`cat "$esrprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$esrchekuaprefs" != "" ]; then
+			useragent="$esrchekuaprefs"
+		else
+			uadefault=true
+		fi
+	elif [ "$uaff" == "nightly" ]; then
+		nightlyprefs="$checknightlyfolder/prefs.js"
+		nightlychekuaprefs=`cat "$nightlyprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$nightlychekuaprefs" != "" ]; then
+			useragent="$nightlychekuaprefs"
+		else
+			uadefault=true
+		fi
+	else
+		uadefault=true
+	fi
+	
+	if ($uadefault) || [ "$useragent" == "" ]; then
+		useragent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
+	fi
+	
+	echo "$useragent"
+}
+
+useragent=`get_user_agent`
+
+############
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+status_msg "Create temp file"
+
+scriptfolder=`pwd "$0"`
+
+if [ ! -e "$scriptfolder/configuration.txt" ]; then
+	touch "$scriptfolder/configuration.txt"
+else
+	echo '' > "$scriptfolder/configuration.txt"
+fi
+
+############
+
+status_msg "Get all endpoints"
+
+curl -L -s -A "$useragent" "https://api.mullvad.net/www/relays/all/" > /tmp/relays_$rnd.txt
+
+############
+
+status_msg "Print only openvpn & active ones"
+
+ips=""
+i=1
+
+while (true)
+do
+	echo -e "$purple""Entry $i""$end"
+	
+	active=`cat /tmp/relays_$rnd.txt | jq .[$i].active | sed 's;";;g'`
+	type=`cat /tmp/relays_$rnd.txt | jq .[$i].type | sed 's;";;g'`
+	
+	if [ "$active" == "true" ] && [ "$type" == "openvpn" ]; then
+		echo -e "$green""OK""$end"
+		
+		actualip=`cat /tmp/relays_$rnd.txt | jq .[$i].ipv4_addr_in | sed 's;";;g'`
+		
+		if [ "$ips" == "" ]; then
+			ips="$actualip"
+		else
+			ips="$ips,$actualip"
+		fi
+	elif [ "$active" == "null" ]; then
+		echo -e "$orange""End""$end"
+		break
+	else
+		echo -e "$red""KO""$end"
+	fi
+	
+	let i=i+1
+done
+
+############
+
+status_msg "Print all IP"
+
+echo "$ips" > "$scriptfolder/configuration.txt"
+
+############
+
+status_msg "Delete temp file"
+
+if [ -e /tmp/relays_$rnd.txt ]; then
+	rm /tmp/relays_$rnd.txt
+fi
+
+############
+
+status_msg "Done"
+exit 0

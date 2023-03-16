@@ -1,0 +1,65 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rnd=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		zenity --error --title "USB Toolbox" --text "Root is needed. Run this script as root!" 2>/dev/null
+		exit 1
+	fi
+}
+
+need_root
+
+############
+
+patch_nm() {
+	echo '[main]
+plugins=ifupdown,device,connection,keyfile
+
+[ifupdown]
+managed=false
+
+[device]
+wifi.scan-rand-mac-address=yes
+ethernet.scan-rand-mac-address=yes
+
+[connection]
+wifi.cloned-mac-address=stable
+ethernet.cloned-mac-address=stable
+connection.stable-id=${CONNECTION}/${BOOT}
+
+[keyfile]
+unmanaged-devices=*,except:type:wifi,except:type:ethernet
+' > /etc/NetworkManager/NetworkManager.conf
+	service network-manager restart
+}
+
+############
+
+testexist=`cat /etc/NetworkManager/NetworkManager.conf | grep 'unmanaged-devices'`
+if [ "$testexist" == "" ]; then
+	echo -e "$orange""Patch need to be applied..""$end"
+	
+	patch_nm
+else
+	echo -e "$red""Patch already applied!""$end"
+	exit 1
+fi
+
+echo -e "$blue""Patched""$end"
+
+exit 0

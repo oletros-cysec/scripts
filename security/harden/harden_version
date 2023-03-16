@@ -1,0 +1,72 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+status_msg "Delete old script if exists"
+
+if [ -e /etc/init.d/harden-system-version ]; then
+	rm -f /etc/init.d/harden-system-version
+	update-rc.d harden-system-version remove
+fi
+
+############
+
+status_msg "Create init script"
+
+echo '#!/bin/sh -e
+
+### BEGIN INIT INFO
+# Provides:          harden-system-version
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Harden System Version
+# Description:       Modify the print of the OS version through /proc/version
+### END INIT INFO
+
+echo "Linux version 5.6.0-2-amd64 (debian-kernel@lists.debian.org) (gcc version 9.3.0 (Debian 9.3.0-13)) #1 SMP Debian 5.6.14-1 (2020-05-23)" > /etc/sysversion
+
+mount -o bind /etc/sysversion /proc/version' > /etc/init.d/harden-system-version
+
+status_msg "Enable script"
+
+chmod +x /etc/init.d/harden-system-version
+update-rc.d harden-system-version defaults
+
+############
+
+status_msg "Done"
+exit 0

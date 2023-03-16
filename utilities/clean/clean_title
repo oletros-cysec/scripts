@@ -1,0 +1,80 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-d 'folder/'] $end
+Details:
+-$cyan -d 'folder/'$end: you must select the folder you want
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+while getopts d: flag
+do
+	case "${flag}" in
+		d) directory=${OPTARG};;
+	esac
+done
+
+if [ ! -d "$directory" ] || [ "$directory" == "" ]; then
+	error_msg "Directory does not exist or is null!"
+fi
+
+securecheck=`echo "$directory" | grep "^$HOME"`
+if [ "$securecheck" == "" ]; then
+	error_msg "Dangerous folder to execute such command! Do it manually!"
+fi
+
+############
+
+find "$directory" -depth -name "*[*" -execdir rename "s/\[//g" "{}" \;
+find "$directory" -depth -name "*]*" -execdir rename "s/\]//g" "{}" \;
+find "$directory" -depth -name "*(*" -execdir rename "s/\(//g" "{}" \;
+find "$directory" -depth -name "*)*" -execdir rename "s/\)//g" "{}" \;
+
+find "$directory" -depth -name "*Album Version*" -execdir rename "s/\(Album Version\)//g" "{}" \;
+find "$directory" -depth -name "*Explicit*" -execdir rename "s/\(Explicit\)//g" "{}" \;
+find "$directory" -depth -name "*Explicit*" -execdir rename "s/Explicit//g" "{}" \;
+
+find "$directory" -depth -name "*{*" -execdir rename "s/\{//g" "{}" \;
+find "$directory" -depth -name "*}*" -execdir rename "s/\}//g" "{}" \;
+find "$directory" -depth -name "*^*" -execdir rename "s/\^//g" "{}" \;
+find "$directory" -depth -name "*'*" -execdir rename "s/'/_/g" "{}" \;
+find "$directory" -depth -name "*,*" -execdir rename "s/,//g" "{}" \;
+find "$directory" -depth -name '*!*' -execdir rename "s/\!//g" "{}" \;
+find "$directory" -depth -name '*#*' -execdir rename "s/\#//g" "{}" \;
+find "$directory" -depth -name '*&*' -execdir rename "s/\&//g" "{}" \;
+find "$directory" -depth -name '*É*' -execdir rename "s/\É/E/g" "{}" \;
+
+find "$directory" -depth -name "* *" -execdir rename 's/ /_/g' "{}" \;
+find "$directory" -depth -name "*__*" -execdir rename 's/__/_/g' "{}" \;
+
+############
+
+exit 0

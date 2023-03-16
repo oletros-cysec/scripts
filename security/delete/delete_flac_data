@@ -1,0 +1,82 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+install_dep() {
+	checkdep=`which flac`
+	if [ "$checkdep" == "" ]; then
+		error_msg "Install manually flac"
+	fi
+}
+
+install_dep
+
+install_dep() {
+	checkdep=`which mat2`
+	if [ "$checkdep" == "" ]; then
+		error_msg "Install manually mat2"
+	fi
+}
+
+install_dep
+
+############
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-f|-d 'document.flac'|'docs/'] $end
+Details:
+-$cyan -f|-d 'document.flac'|'docs/'$end: you must choose a simple file or a folder
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+while getopts f:d: flag
+do
+	case "${flag}" in
+		f) thefile=${OPTARG};;
+		d) thefolder=${OPTARG};;
+	esac
+done
+
+############
+
+status_msg "Proceed the deletion of metadatas"
+
+if [ -e "$thefile" ]; then
+	mat2 --inplace "$thefile"
+	metaflac --remove-all "$thefile"
+fi
+
+if [ -d "$thefolder" ]; then
+	find "$thefolder" -name "*.flac" -exec mat2 --inplace "{}" \;
+	find "$thefolder" -name "*.flac" -exec metaflac --remove-all "{}" \;
+fi
+
+############
+
+status_msg "Done"
+exit 0

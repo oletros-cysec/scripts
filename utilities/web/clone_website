@@ -1,0 +1,218 @@
+#!/bin/bash
+# root: n
+
+############
+
+error_message() {
+	zenity --error --title "Website Cloner" --text "You had to choose!" 2>/dev/null
+	exit 1
+}
+
+install_manually() {
+	installcmd="apt update && apt install $*"
+	
+	echo "$installcmd" | zenity --text-info --title "Error - You need to install manually!" 2>/dev/null
+	exit 1
+}
+
+start_service_manually() {
+	startcmd="service $1 start"
+	
+	echo "$startcmd" | zenity --text-info --title "Error - You need to start service manually!" 2>/dev/null
+	exit 1
+}
+
+stop_service_manually() {
+	stopcmd="service $1 stop"
+	
+	echo "$stopcmd" | zenity --text-info --title "Error - You need to stop service manually!" 2>/dev/null
+	exit 1
+}
+
+check_sudo() {
+	issudo=false
+	
+	depsudo=`which sudo`
+	if [ "$depsudo" == "" ]; then
+		issudo=false
+	else
+		issudo=true
+	fi
+	
+	echo "$issudo"
+}
+
+get_user_agent() {
+	uadefault=false
+	uaff=""
+	useragent=""
+	
+	checkesrfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-esr' | head -1`
+	checknightlyfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-nightly' | head -1`
+	
+	if [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="esr"
+	elif [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="nightly"
+	else
+		uadefault=true
+	fi
+	
+	if [ "$uaff" == "esr" ]; then
+		esrprefs="$checkesrfolder/prefs.js"
+		esrchekuaprefs=`cat "$esrprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$esrchekuaprefs" != "" ]; then
+			useragent="$esrchekuaprefs"
+		else
+			uadefault=true
+		fi
+	elif [ "$uaff" == "nightly" ]; then
+		nightlyprefs="$checknightlyfolder/prefs.js"
+		nightlychekuaprefs=`cat "$nightlyprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$nightlychekuaprefs" != "" ]; then
+			useragent="$nightlychekuaprefs"
+		else
+			uadefault=true
+		fi
+	else
+		uadefault=true
+	fi
+	
+	if ($uadefault) || [ "$useragent" == "" ]; then
+		useragent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
+	fi
+	
+	echo "$useragent"
+}
+
+useragent=`get_user_agent`
+
+############
+
+folder=`zenity --file-selection --directory --title "Destination folder:" 2>/dev/null`
+if [ "$folder" == "" ]; then
+	error_message
+fi
+
+url=`zenity --entry --title "Clone Website" --text "URL to clone:" 2>/dev/null`
+if [ "$url" == "" ]; then
+	error_message
+fi
+
+if [[ $url == *".onion"* ]]; then
+	urltor=true
+	
+	deptor=`which torsocks`
+	if [ "$deptor" == "" ]; then
+		zenity --info --title "Website Cloner" --text "Need to install Tor!" 2>/dev/null
+		
+		if (`check_sudo`); then
+			sudo apt update
+			sudo apt install tor torsocks
+		else
+			install_manually tor torsocks
+		fi
+	fi
+	
+	serviceon=`service tor status | grep inactive`
+	if [ "$serviceon" != "" ]; then
+		zenity --info --title "Website Cloner" --text "Lancement du service Tor en 30 secondes" 2>/dev/null
+		
+		if (`check_sudo`); then
+			sudo service tor start
+			sleep 30
+		else
+			start_service_manually tor
+		fi
+	fi
+else
+	urltor=false
+fi
+
+options=`zenity --list --title "Clone Website" --text "Parameters for the cloning process" --checklist --column "Choose" --column "Options" TRUE "Only the path chosen" TRUE "Bypass robots.txt" FALSE "Custom User-Agent" TRUE "Custom Referer" TRUE "Show progress bar" TRUE "Do not erase existing files if same" FALSE "Choose specific file extensions" --separator="|" 2>/dev/null`
+
+checkoption=`echo "$options" | cut -d"|" -f1`
+if [ "$checkoption" == "Only the path chosen" ]; then
+	parent="-np"
+else
+	parent=""
+fi
+
+checkoption=`echo "$options" | cut -d"|" -f2`
+if [ "$checkoption" == "Bypass robots.txt" ]; then
+	robots="-e robots=off"
+else
+	robots=""
+fi
+
+checkoption=`echo "$options" | cut -d"|" -f3`
+if [ "$checkoption" == "Custom User-Agent" ]; then
+	uachoix=`zenity --entry --title "Clone Website" --text "Desired User-Agent:" 2>/dev/null`
+	if [ "$uachoix" == "" ]; then
+		ua="-U \"$useragent\""
+	else
+		ua="-U \"$uachoix\""
+	fi
+else
+	ua="-U \"$useragent\""
+fi
+
+checkoption=`echo "$options" | cut -d"|" -f4`
+if [ "$checkoption" == "Custom Referer" ]; then
+	refererurl=`zenity --entry --title "Clone Website" --text "Desired referer:" 2>/dev/null`
+	if [ "$refererurl" == "" ]; then
+		referer="--referer \"https://medium.com/\""
+	else
+		referer="--referer \"$refererurl\""
+	fi
+else
+	referer="--referer \"https://medium.com/\""
+fi
+
+checkoption=`echo "$options" | cut -d"|" -f5`
+if [ "$checkoption" == "Show progress bar" ]; then
+	prba="--show-progress"
+else
+	prba=""
+fi
+
+checkoption=`echo "$options" | cut -d"|" -f6`
+if [ "$checkoption" == "Do not erase existing files if same" ]; then
+	overwrite="-N"
+else
+	overwrite=""
+fi
+
+checkoption=`echo "$options" | cut -d"|" -f7`
+if [ "$checkoption" == "Choose specific file extensions" ]; then
+	extchoix=`zenity --entry --title "Clone Website" --text "Desired extensions separated by comma:" 2>/dev/null`
+	if [ "$extchoix" != "" ]; then
+		extensions="-A \"$extchoix\""
+	else
+		extensions=""
+	fi
+else
+	extensions=""
+fi
+
+if ($urltor); then
+	torsocks wget --mirror $parent $robots $referer $prba $extensions $ua $overwrite "$url" -P "$folder"
+	
+	serviceoff=`zenity --question --title "Clone Website" --text "Stopper le service Tor ?" 2>/dev/null`
+	if [ "$serviceoff" == "0" ]; then
+		if (`check_sudo`); then
+			sudo service tor stop
+		else
+			stop_service_manually tor
+		fi
+	fi
+else
+	wget --mirror $parent $robots $referer $prba $extensions $ua $overwrite "$url" -P "$folder"
+fi
+
+zenity --info --title "Clone Website" --text "Done" 2>/dev/null
+exit 0

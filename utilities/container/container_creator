@@ -1,0 +1,160 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c6`
+
+############
+
+error_msg() {
+	zenity --error --title "Container Creator" --text "$1" 2>/dev/null
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[+] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed!"
+	fi
+}
+
+need_root
+
+############
+
+theoricaluser=`cat /etc/passwd | grep '1000:1000' | cut -d':' -f1`
+chooseuser=`zenity --list --title "Container Creator - Select User" --text "Choose the normal user you use" --column Choix "$theoricaluser" "other" "exit" 2>/dev/null`
+
+if [ "$chooseuser" == "$theoricaluser" ]; then
+	theuser="$theoricaluser"
+elif [ "$chooseuser" == "other" ]; then
+	theuser=`zenity --entry --title "Container Creator - Custom User" --text "User: " 2>/dev/null`
+	checkuserexist=`cat /etc/passwd | grep "$theuser:"`
+	
+	if [ "$theuser" == "" ]; then
+		exit 1
+	elif [ "$checkuserexist" == "" ]; then
+		error_msg "This user does not exist on /etc/passwd"
+	fi
+else
+	exit 0
+fi
+
+homediruser=`cat /etc/passwd | grep "$theuser:" | cut -d':' -f6`
+if [ "$homediruser" == "" ]; then
+	error_msg "The HOME folder of this user does not exist"
+fi
+
+containerfolder="$homediruser/containers"
+mountpoint="$containerfolder/mountpoint"
+
+if [ ! -d "$containerfolder" ]; then
+	mkdir -p "$containerfolder"
+fi
+
+if [ ! -d "$mountpoint" ]; then
+	mkdir -p "$mountpoint"
+fi
+
+chown -R $theuser:$theuser "$containerfolder"
+
+############
+
+exist=true
+while ($exist)
+do
+	thecontainer=`zenity --entry --title "Container Creator - Container Name" --text "Name: " 2>/dev/null`
+	if [ "$thecontainer" == "" ]; then
+		error_msg "You had to choose!"
+	fi
+
+	checkcontainer=`echo "$thecontainer" | grep '\.'`
+	if [ "$checkcontainer" == "" ]; then
+		containername="$thecontainer.img"
+	else
+		containername="$thecontainer"
+	fi
+
+	if [ -e "$containerfolder/$containername" ]; then
+		exist=true
+	else
+		exist=false
+	fi
+done
+
+containerfile="$containerfolder/$containername"
+
+############
+
+size=`zenity --forms --title "Container Creator - Container Size" --text "Choose the configuration you want" --add-entry "Size of the Container: " --add-list "Select the Units: " --list-values "Ko|Mo|Go" --separator="|" 2>/dev/null`
+
+nbsize=`echo "$size" | cut -d'|' -f1`
+if [ "$nbsize" == "" ]; then
+	exit 1
+fi
+
+usize=`echo "$size" | cut -d'|' -f2`
+if [ "$usize" == "Ko" ]; then
+	units="K"
+elif [ "$usize" == "Mo" ]; then
+	units="M"
+elif [ "$usize" == "Go" ]; then
+	units="G"
+else
+	exit 1
+fi
+
+totalsize="$nbsize$units"
+
+############
+
+status_msg "Create container"
+
+dd if=/dev/zero of="$containerfile" bs=1 count=0 seek=$totalsize
+
+status_msg "Create LUKS partition on Container"
+
+cryptsetup -v --type luks2 --use-urandom -y luksFormat "$containerfile"
+
+status_msg "Open LUKS partition"
+
+cryptsetup -v luksOpen "$containerfile" "$rndstr"
+
+status_msg "Mount partition"
+
+mkfs.ext4 /dev/mapper/$rndstr
+mount /dev/mapper/$rndstr "$mountpoint"
+
+status_msg "Give good rights to partition"
+
+chown -R $theuser:$theuser "$mountpoint"
+chmod 755 "$mountpoint"
+
+status_msg "Unmount partition"
+
+umount "$mountpoint"
+cryptsetup -v luksClose $rndstr
+
+############
+
+chown $theuser:$theuser "$containerfile"
+
+status_msg "Done"
+
+############
+
+exit 0

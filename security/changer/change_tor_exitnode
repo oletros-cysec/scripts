@@ -1,0 +1,141 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+install_dep() {
+	checkdep=`which tor`
+	if [ "$checkdep" == "" ]; then
+		apt install tor torsocks
+	fi
+}
+
+install_dep
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-u 'user' -b 'US'] [-s 'US'] $end
+Details:
+-$cyan -u 'user' -b 'US'$end: you must choose the user where tbb can be found. The final argument is for the country to choose for tbb
+-$cyan -s 'US'$end: the final argument is for the country to choose for the service
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isuserchosen=false
+isbrowser=false
+isservice=false
+
+while getopts u:b:s: flag
+do
+	case "${flag}" in
+		u) isuserchosen=true; user=${OPTARG};;
+		b) isbrowser=true; countrybrowser=${OPTARG};;
+		s) isservice=true; countryservice=${OPTARG};;
+	esac
+done
+
+############
+
+get_tbb_folder() {
+	username="$1"
+	
+	torbrowserroot=`find /home/$username -type d -name 'TorBrowser' | head -1`
+	tbbfolder="$torbrowserroot/Data/Tor"
+	
+	echo "$tbbfolder"
+}
+
+init_tbb() {
+	tbbfolder="$1"
+	
+	checkexitnode=`cat "$tbbfolder"/torrc | grep 'ExitNodes'`
+	if [ "$checkexitnode" == "" ]; then
+		echo "
+# Exit IP Country
+ExitNodes {US}" >> "$tbbfolder"/torrc
+	fi
+}
+
+init_service() {
+	checkexitnode=`cat /etc/tor/torrc | grep 'ExitNodes'`
+	if [ "$checkexitnode" == "" ]; then
+		echo "
+# Exit IP Country
+ExitNodes {US}" >> /etc/tor/torrc
+	fi
+}
+
+############
+
+if ($isuserchosen) && ($isbrowser); then
+	tbbfolder=`get_tbb_folder`
+	
+	if [ "$tbbfolder" == "" ]; then
+		error_msg "TorBrowser was not found!"
+	fi
+	
+	if [ "$countrybrowser" == "" ]; then
+		error_msg "Country is empty!"
+	fi
+	
+	init_tbb "$tbbfolder"
+	
+	actualcountry=`cat "$tbbfolder"/torrc | grep 'ExitNodes' | cut -c12,13`
+	
+	sed -i "s;ExitNodes {$actualcountry};ExitNodes {$countrybrowser};g" "$tbbfolder"/torrc
+fi
+
+if ($isservice); then
+	if [ "$countryservice" == "" ]; then
+		error_msg "Country is empty!"
+	fi
+	
+	init_service
+	
+	actualcountry=`cat /etc/tor/torrc | grep 'ExitNodes' | cut -c12,13`
+	
+	sed -i "s;ExitNodes {$actualcountry};ExitNodes {$countryservice};g" /etc/tor/torrc
+	
+	service tor restart
+fi
+
+############
+
+echo -e "$blue""[~] Done""$end"
+exit 0

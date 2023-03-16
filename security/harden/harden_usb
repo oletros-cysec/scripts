@@ -1,0 +1,128 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rnd=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+############
+
+error_msg() {
+	zenity --error --title "Change Luks Key" --text "$1" 2>/dev/null
+	exit 1
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+install_dep() {
+	checkdep=`which usbguard`
+	if [ "$checkdep" == "" ]; then
+		apt install usbguard
+		systemctl enable usbguard.service
+		usbguard generate-policy > /etc/usbguard/rules.conf
+	fi
+}
+
+############
+
+task_done() {
+	zenity --info --title "USB Toolbox" --text "Done" 2>/dev/null
+}
+
+usbguard_manager() {
+	usbguard $1 $2
+}
+
+usbguard_list() {
+	usbguard list-devices | grep 'with-connect-type "hotplug"' > /tmp/$rnd-usbguard_devices.txt
+	
+	result=""
+	
+	isfirst=true
+	while IFS='' read -r line || [[ -n "$line" ]]; do
+		theid=`echo "$line" | cut -d':' -f1`
+		status=`echo "$line" | cut -d' ' -f2`
+		name=`echo "$line" | grep -Eo 'name ".*" hash' | cut -d'"' -f2 | tr ' ' '_' | sed "s;_$;;g"`
+		
+		if ($isfirst); then
+			result="TRUE $theid $status '$name'"
+			isfirst=false
+		else
+			result=$result" FALSE $theid $status '$name'"
+		fi
+	done < /tmp/$rnd-usbguard_devices.txt
+	
+	thechoice=`zenity --list --radiolist --width "475" --height "250" --multiple --title "USB Toolbox" --text "Make your choice" --column "Choice" --column "ID" --column "Status" --column "Name" $result 2>/dev/null`
+	if [ "$thechoice" == "" ]; then
+		zenity --error --title "USB Toolbox" --text "You had to choose!" 2>/dev/null
+		exit 1
+	fi
+	
+	echo "$thechoice"
+}
+
+kill_if_empty() {
+	if [ "$1" == "" ]; then
+		exit 1
+	fi
+}
+
+############
+
+while (true)
+do
+	menu=`zenity --list --title "USB Toolbox" --text "Make your choice" --column Choice "Install" "Allow device" "Block device" "Block & Remove approved device" "Exit" 2>/dev/null`
+
+	if [ "$menu" = "Install" ]; then
+		install_dep
+		task_done
+
+	elif [ "$menu" = "Allow device" ]; then
+		device=`usbguard_list`
+		kill_if_empty $device
+		usbguard_manager allow-device $device
+		
+		task_done
+
+	elif [ "$menu" = "Block device" ]; then
+		device=`usbguard_list`
+		kill_if_empty $device
+		usbguard_manager block-device $device
+		
+		task_done
+
+	elif [ "$menu" = "Block & Remove approved device" ]; then
+		device=`usbguard_list`
+		kill_if_empty $device
+		usbguard_manager reject-device $device
+		
+		task_done
+
+	elif [ "$menu" = "Exit" ]; then
+		break
+
+	else
+		exit 1
+		
+	fi
+done
+
+exit 0

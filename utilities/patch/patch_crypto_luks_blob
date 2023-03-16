@@ -1,0 +1,44 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed!"
+	fi
+}
+
+need_root
+
+############
+
+apt update
+apt install libblockdev-crypto2
+systemctl restart udisks2
+
+############
+
+status_msg "Pacthed"
+done

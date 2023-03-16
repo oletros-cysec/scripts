@@ -1,0 +1,157 @@
+#!/bin/bash
+# root: y
+
+sysctlbackup=true
+
+############
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+		exit 1
+	fi
+}
+
+need_root
+
+############
+
+status_msg "Create kernel configuration file"
+
+echo "127.0.0.1	localhost
+127.0.1.1	`hostname`" > /etc/hosts
+
+if ($sysctlbackup) && [ ! -e /etc/sysctl.conf.bak ]; then
+	status_msg "Create backup"
+	
+	cp -f /etc/sysctl.conf /etc/sysctl.conf.bak
+fi
+
+echo "# Disable IPv6
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.all.autoconf=0
+net.ipv6.conf.default.disable_ipv6=1
+net.ipv6.conf.default.autoconf=0
+net.ipv6.conf.tun0.disable_ipv6=1
+net.ipv6.conf.tun0.autoconf=0
+net.ipv6.conf.wlan0.disable_ipv6=1
+net.ipv6.conf.wlan0.autoconf=0
+net.ipv6.conf.eth0.disable_ipv6=1
+net.ipv6.conf.eth0.autoconf=0" > /etc/sysctl.conf
+
+echo "
+# Avoid UDP callback leak
+net.ipv4.conf.all.rp_filter=1
+net.ipv4.conf.default.rp_filter=1
+net.ipv4.conf.tun0.rp_filter=1
+net.ipv4.conf.wlan0.rp_filter=1
+net.ipv4.conf.eth0.rp_filter=1" >> /etc/sysctl.conf
+
+echo "
+# No redirect to avoid MITM attack
+net.ipv4.conf.all.accept_redirects=0
+net.ipv4.conf.all.send_redirects=0
+net.ipv4.conf.default.accept_redirects=0
+net.ipv4.conf.default.send_redirects=0
+
+# Avoid SYN-Flood
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_synack_retries=5
+
+# Lynis hints
+net.ipv4.tcp_timestamps=0
+net.ipv4.conf.default.log_martians=1
+
+# Avoid ICMP manipulation
+net.ipv4.icmp_echo_ignore_broadcasts=1
+net.ipv4.icmp_echo_ignore_all=1
+net.ipv4.icmp_ignore_bogus_error_responses=1
+
+# Avoid TCP manipulation
+net.ipv4.conf.all.forwarding=0
+net.ipv4.conf.all.rp_filter=1
+net.ipv4.tcp_max_syn_backlog=1280
+net.ipv4.tcp_synack_retries=2
+net.ipv4.tcp_syn_retries=5
+
+# Disable IPv4 forwarding
+net.ipv4.ip_forward=0
+
+# Avoid IPv4 routing
+net.ipv4.conf.all.accept_source_route=0
+net.ipv4.conf.default.accept_source_route=0
+
+# Improve logs
+net.ipv4.conf.all.log_martians=1
+
+# Improve DoS protection
+net.ipv4.tcp_max_tw_buckets=1440000
+
+# RFC 1337 fix
+net.ipv4.tcp_rfc1337=1
+
+# Improve kernel security
+kernel.sysrq=0
+kernel.exec-shield=2
+kernel.randomize_va_space=2
+kernel.maps_protect=1
+kernel.core_uses_pid=1
+
+# Hide kernel pointers
+kernel.kptr_restrict=1
+
+# Restric kernel dumps
+fs.suid_dumpable=0
+
+# Protect against symlinks abuse
+fs.protected_hardlinks=1
+fs.protected_symlinks=1" >> /etc/sysctl.conf
+
+############
+
+status_msg "Enable script"
+
+sysctl -q -p -w 2>/dev/null
+
+############
+
+status_msg "Disable IPv6 & IFNAMES in GRUB"
+
+testgrub=`cat /etc/default/grub | grep 'ipv6.disable=1 net.ifnames=0 biosdevname=0'`
+if [ "$testgrub" == "" ]; then
+	echo -e "\n# Disable IPv6 & IFNAMES\nGRUB_CMDLINE_LINUX=\"ipv6.disable=1 net.ifnames=0 biosdevname=0\"" >> /etc/default/grub
+fi
+
+############
+
+status_msg "Update Grub"
+
+update-grub
+
+############
+
+status_msg "Done"
+exit 0

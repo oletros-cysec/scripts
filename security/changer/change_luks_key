@@ -1,0 +1,138 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	zenity --error --title "Change Luks Key" --text "$1" 2>/dev/null
+	exit 1
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+install_dep() {
+	checkdep=`which cryptsetup`
+	if [ "$checkdep" == "" ]; then
+		apt install cryptsetup
+	fi
+}
+
+install_dep
+
+############
+
+find_luks() {
+	isluksfound=false
+	for device in `/sbin/fdisk -l -o Device | awk '/Device/,/Disk/' | grep -E '^/dev' | tr '\n' ' ' | sed 's; $;;g'`
+	do
+		checkluks=`/sbin/cryptsetup luksDump $device 2>&1 | grep 'LUKS header information'`
+		if [ "$checkluks" != "" ]; then
+			isluksfound=true
+			if [ "$result" == "" ]; then
+				result="TRUE $device"
+			else
+				result=$result" FALSE $device"
+			fi
+		fi
+	done
+	
+	if ! ($isluksfound); then
+		error_msg "No Luks device found!"
+	fi
+	
+	luksdevice=`zenity --list --radiolist --width "475" --height "250" --multiple --title "Change Luks Key" --text "Make your choice" --column "Choice" --column "Device" $result 2>/dev/null`
+	if [ "$luksdevice" == "" ]; then
+		error_msg "You had to choose!"
+	fi
+	
+	echo "$luksdevice"
+}
+
+luksdevice=`find_luks`
+
+if [ "$luksdevice" == "" ]; then
+	error_msg "No Luks device found!"
+fi
+
+############
+
+find_slots() {
+	isslotfound=false
+	for slot in `/sbin/cryptsetup luksDump $luksdevice 2>&1 | awk '/Keyslots:/,/Tokens:/' | grep -Eo '[0-9]{1,3}:' | sed 's;:;;g' | tr '\n' ' ' | sed 's;^ ;;g' | sed 's; $;;g'`
+	do
+		if [ "$slot" != "" ] && ! ($isslotfound); then
+			isslotfound=true
+		fi
+		
+		if [ "$result" == "" ]; then
+			result="TRUE $slot"
+		else
+			result=$result" FALSE $slot"
+		fi
+	done
+	
+	if ! ($isslotfound); then
+		error_msg "No slots found!"
+	fi
+	
+	slotchoosen=`zenity --list --radiolist --width "475" --height "250" --multiple --title "Change Luks Key" --text "Make your choice" --column "Choice" --column "Device" $result 2>/dev/null`
+	if [ "$slotchoosen" == "" ]; then
+		error_msg "You had to choose!"
+	fi
+	
+	echo "$slotchoosen"
+}
+
+############
+
+while [ "1" = "1" ]
+do
+
+luksactions=`zenity --width=360 --height=300 --list --title "Change Luks Key" --text "Make your choice" --column Choice "Add" "Delete" "Exit" 2>/dev/null`
+
+if [ "$luksactions" = "Add" ]; then
+	/sbin/cryptsetup luksAddKey "$luksdevice"
+
+elif [ "$luksactions" = "Delete" ]; then
+	slotchoosen=`find_slots`
+	
+	if [ "$slotchoosen" == "" ]; then
+		error_msg "No slots found!"
+	fi
+
+	/sbin/cryptsetup luksKillSlot "$luksdevice" "$slotchoosen"
+
+elif [ "$luksactions" = "Exit" ]; then
+	break
+
+else
+	exit 0
+
+fi
+
+done
+
+############
+
+zenity --info --title "Change Luks Key" --text "Done" 2>/dev/null
+exit 0

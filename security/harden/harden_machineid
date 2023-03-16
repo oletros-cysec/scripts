@@ -1,0 +1,86 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+		exit 1
+	fi
+}
+
+need_root
+
+############
+
+install_dep() {
+	checkinitscripts=`dpkg -s initscripts | grep 'install ok installed'`
+	if [ "$checkinitscripts" == "" ]; then
+		apt install iniscripts
+	fi
+}
+
+install_dep
+
+############
+
+status_msg "Delete old script if exists"
+
+if [ -e /etc/init.d/harden-machine-id ]; then
+	rm -f /etc/init.d/harden-machine-id
+	update-rc.d harden-machine-id remove
+fi
+
+############
+
+status_msg "Create init script"
+
+echo '#!/bin/sh -e
+
+### BEGIN INIT INFO
+# Provides:          harden-machine-id
+# Required-Start:    mountkernfs $local_fs urandom
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Harden Machine ID
+# Description:       Randomly change the machine ID based on urandom
+### END INIT INFO
+
+rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+nouveau=`echo -n "$rndstr" | od -A n -t x1 | sed "s; ;;g"`
+
+echo "$nouveau" > /var/lib/dbus/machine-idMais
+echo "$nouveau" > /etc/machine-id' > /etc/init.d/harden-machine-id
+
+status_msg "Enable script"
+
+chmod +x /etc/init.d/harden-machine-id
+update-rc.d harden-machine-id defaults
+
+############
+
+status_msg "Done"
+exit 0

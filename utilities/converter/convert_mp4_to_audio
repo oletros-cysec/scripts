@@ -1,0 +1,89 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-i 'input.mp4'] [-o 'output.mp3'] (-a) (-v)$end
+Details:
+-$cyan -i 'input.mp4'$end: the file where extract audio
+-$cyan -o 'output.mp3'$end: output filename expected
+-$cyan -v$end: enable video extraction
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isoutput=false
+isvideo=false
+
+while getopts vi:o: flag
+do
+	case "${flag}" in
+		i) input=${OPTARG};;
+		o) isoutput=true; output=${OPTARG};;
+		v) isvideo=true;;
+	esac
+done
+
+if [ ! -e "$input" ] || [ "$input" == "" ]; then
+	error_msg "Input file not exist or null!"
+fi
+
+if [ -e "$output" ]; then
+	error_msg "Output file already exists!"
+fi
+
+############
+
+if ($isvideo); then
+	video="-vcodec copy"
+else
+	video=""
+fi
+
+############
+
+if ($isoutput); then
+	ffmpeg -i "$input" > /tmp/$rndstr-stream.txt 2>&1
+	actualstream=`cat /tmp/$rndstr-stream.txt | grep 'Audio:' | grep -Eo 'Stream \#[0-9]*:' | head -1 | cut -d'#' -f2 | cut -d':' -f1`
+	
+	ffmpeg -i "$input" -map 0:$actualstream -acodec copy $video "$output"
+else
+	error_msg "Output filename expected!"
+fi
+
+############
+
+if [ -e /tmp/$rndstr-stream.txt ]; then
+	rm /tmp/$rndstr-stream.txt
+fi
+
+############
+
+exit 0

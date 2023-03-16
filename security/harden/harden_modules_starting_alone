@@ -1,0 +1,103 @@
+#!/bin/bash
+# root: y
+
+purgebackup=false # decide if we purge the actual backup if exists
+
+############
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+		exit 1
+	fi
+}
+
+need_root
+
+############
+
+driversound=`cat /proc/asound/modules | head -1 | cut -d' ' -f3`
+
+############
+
+if [ -e /etc/modprobe.d/blacklist.conf ]; then
+	if [ -e /etc/modprobe.d/blacklist.conf.bak ]; then
+		if ($purgebackup); then
+			rm -f /etc/modprobe.d/blacklist.conf.bak
+			cp /etc/modprobe.d/blacklist.conf /etc/modprobe.d/blacklist.conf.bak
+		fi
+	else
+		cp /etc/modprobe.d/blacklist.conf /etc/modprobe.d/blacklist.conf.bak
+	fi
+	
+	echo '' > /etc/modprobe.d/blacklist.conf
+else
+	touch /etc/modprobe.d/blacklist.conf
+fi
+
+############
+
+checkbox=`zenity --list --title "Disable Leak & Low Modules" --text "Choose what to disable" --checklist --column "Choice" --column "Options" TRUE "Webcam" TRUE "Microphone & Soundcard" TRUE "Bluetooth" TRUE "Pcspkr" TRUE "WWAN" TRUE "Firewire" --separator="|" 2>/dev/null`
+
+test=`echo $checkbox | grep "Webcam"`
+if [ "$test" != "" ]; then
+	echo "blacklist uvcvideo" >> /etc/modprobe.d/blacklist.conf
+fi
+
+test=`echo $checkbox | grep "Microphone & Soundcard"`
+if [ "$test" != "" ]; then
+	echo "blacklist $driversound" >> /etc/modprobe.d/blacklist.conf
+fi
+
+test=`echo $checkbox | grep "Bluetooth"`
+if [ "$test" != "" ]; then
+	echo "blacklist bluetooth" >> /etc/modprobe.d/blacklist.conf
+fi
+
+test=`echo $checkbox | grep "Pcspkr"`
+if [ "$test" != "" ]; then
+	echo "blacklist pcspkr" >> /etc/modprobe.d/blacklist.conf
+fi
+
+test=`echo $checkbox | grep "WWAN"`
+if [ "$test" != "" ]; then
+	echo "blacklist qmi_wwan" >> /etc/modprobe.d/blacklist.conf
+	echo "blacklist qcserial" >> /etc/modprobe.d/blacklist.conf
+fi
+
+test=`echo $checkbox | grep "Firewire"`
+if [ "$test" != "" ]; then
+	echo "blacklist ohci1394
+blacklist sbp2
+blacklist dv1394
+blacklist raw1394
+blacklist video1394
+blacklist firewire-ohci
+blacklist firewire-sbp2" >> /etc/modprobe.d/blacklist.conf
+fi
+
+update-initramfs -u -k all
+
+############
+
+zenity --info --title "Disable Leak & Low Modules" --text "Done" 2>/dev/null
+exit 0

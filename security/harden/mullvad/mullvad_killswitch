@@ -1,0 +1,231 @@
+#!/bin/bash
+# root: y
+
+renewips=true # renew all ip addresses
+
+############
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rnd=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+scriptfolder=`pwd "$0"`
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		zenity --error --title "Mullvad KillSwitch - Setup" --text "Root is needed using su. Run this script as root!" 2>/dev/null
+		exit 1
+	fi
+}
+
+need_root
+
+############
+
+install_dep() {
+	checkdep=`which iptables`
+	if [ "$checkdep" == "" ]; then
+		apt install iptables ip6tables
+		
+	fi
+	
+	checkinitscripts=`dpkg -s initscripts | grep 'install ok installed'`
+	if [ "$checkinitscripts" == "" ]; then
+		apt install iniscripts
+	fi
+}
+
+install_dep
+
+############
+
+# Ports are not supposed to be changed
+portsudp="53,1194,1195,1196,1197,1300,1301,1302"
+portstcp="53,443"
+
+# old backup DNS: 193.138.218.74
+# dnsbackup=""
+
+# api.mullvad.net to logon | needed in versions > 2022.1
+
+# old api port: 1234
+portstcpapi=""
+
+# doh.mullvad.net has address 194.242.2.2
+# old api IPs: 45.83.220.117,185.65.134.66
+iptcpapi="45.83.223.193,45.83.222.100,194.242.2.2"
+
+############
+
+zenity --question --title "Mullvad KillSwitch - Setup" --text "Informations:\n- use only if version is > 2018.5\n- patch the api issue from 2022.2\nDo you want to continue?" 2>/dev/null
+
+verification=`echo $?`
+if [ "$verification" == "1" ]; then
+	exit 0
+fi
+
+############
+
+generate_list() {
+	bash "$scriptfolder"/mullvad_openvpn_list_ip
+}
+
+############
+
+if [ ! -e "$scriptfolder/configuration.txt" ] || ($renewips); then
+	generate_list
+fi
+
+ipaddresses=`cat "$scriptfolder/configuration.txt"`
+
+############
+
+if [ -e /etc/init.d/killswitch ]; then
+	zenity --error --title "Mullvad KillSwitch - Setup" --text "Script already setup!" --width 300 --height 150 2>/dev/null
+	choixscript=`zenity --list --title "Mullvad KillSwitch - Setup" --text "Do you want to continue?\nIf yes, the actual killswitch will be deleted!" --radiolist --column "Choice" --column "Options" TRUE "Yes" FALSE "No" 2>/dev/null`
+	if [ "$choixscript" == "Yes" ]; then
+		rm -f /etc/init.d/killswitch
+		update-rc.d killswitch remove
+	elif [ "$choixscript" == "No" ]; then
+		exit 0
+	else
+		exit 1
+	fi
+fi
+	
+touch /etc/init.d/killswitch
+chmod +x /etc/init.d/killswitch
+	
+echo '#!/bin/sh -e
+
+### BEGIN INIT INFO
+# Provides:          killswitch
+# Required-Start:    $network $remote_fs $syslog
+# Required-Stop:     $network $remote_fs $syslog
+# Should-Start:      network-manager
+# Should-Stop:       network-manager
+# X-Start-Before:    $x-display-manager gdm kdm xdm wdm ldm sdm nodm
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Mullvad KillSwitch
+# Description:       Mullvad KillSwitch using iptables. IPv6 is totally forbidden.
+### END INIT INFO
+' > /etc/init.d/killswitch
+
+echo '# IPv6: KO
+ip6tables -P OUTPUT DROP
+ip6tables -P INPUT DROP
+' >> /etc/init.d/killswitch
+	
+localhost=`zenity --entry --title "Mullvad KillSwitch - Setup" --text "Local interface (default value will be lo):" 2>/dev/null`
+if [ "$localhost" == "" ]; then
+	localhost="lo"
+fi
+	
+vpntunnel=`zenity --entry --title "Mullvad KillSwitch - Setup" --text "VPN interface (default value will be tun):" 2>/dev/null`
+if [ "$vpntunnel" == "" ]; then
+	vpntunnel="tun"
+fi
+	
+echo "# IPv4: OK
+iptables -P OUTPUT DROP
+iptables -A OUTPUT -o $vpntunnel+ -j ACCEPT
+iptables -A INPUT -i $localhost -j ACCEPT
+iptables -A OUTPUT -o $localhost -j ACCEPT
+iptables -A OUTPUT -d 255.255.255.255 -j ACCEPT
+iptables -A INPUT -s 255.255.255.255 -j ACCEPT
+" >> /etc/init.d/killswitch
+
+while [ "1" = "1" ]
+do
+
+addinterface=`zenity --width 300 --height 200 --list --title "Mullvad KillSwitch - Setup" --text "Add an network interface" --column Choice "All available" "Custom" "Exit" 2>/dev/null`
+
+if [ "$addinterface" = "All available" ]; then
+	for iface in `ifconfig | grep mtu | cut -d':' -f1 | uniq -i`
+	do
+		if [ "$iface" != "$localhost" ] && [[ $iface != *$vpntunnel* ]]; then
+			if [ "$portstcpapi" == "" ]; then
+				echo "iptables -A OUTPUT -o $iface -p udp -m multiport --dports $portsudp -d $ipaddresses -j ACCEPT
+iptables -A OUTPUT -o $iface -p tcp -m multiport --dports $portstcp -d $iptcpapi,$ipaddresses -j ACCEPT
+" >> /etc/init.d/killswitch
+			else
+				echo "iptables -A OUTPUT -o $iface -p udp -m multiport --dports $portsudp -d $ipaddresses -j ACCEPT
+iptables -A OUTPUT -o $iface -p tcp -m multiport --dports $portstcp,$portstcpapi -d $iptcpapi,$ipaddresses -j ACCEPT
+" >> /etc/init.d/killswitch
+			fi
+				
+			zenity --info --title "Mullvad KillSwitch - Setup" --text "Interface $iface added" 2>/dev/null
+				
+			udevadm test-builtin net_id /sys/class/net/$iface > /tmp/killswitch_$rnd.txt
+			ifnamesiface=`cat /tmp/killswitch_$rnd.txt | grep 'ID_NET_NAME_PATH' | cut -d'=' -f2`
+				
+			if [ "$ifnamesiface" != "" ] && [ "$ifnamesiface" != "$iface" ]; then
+				if [ "$portstcpapi" == "" ]; then
+					echo "iptables -A OUTPUT -o $ifnamesiface -p udp -m multiport --dports $portsudp -d $ipaddresses -j ACCEPT
+iptables -A OUTPUT -o $ifnamesiface -p tcp -m multiport --dports $portstcp -d $iptcpapi,$ipaddresses -j ACCEPT
+" >> /etc/init.d/killswitch
+				else
+					echo "iptables -A OUTPUT -o $ifnamesiface -p udp -m multiport --dports $portsudp -d $ipaddresses -j ACCEPT
+iptables -A OUTPUT -o $ifnamesiface -p tcp -m multiport --dports $portstcp,$portstcpapi -d $iptcpapi,$ipaddresses -j ACCEPT
+" >> /etc/init.d/killswitch
+				fi
+
+				zenity --info --title "Mullvad KillSwitch - Setup" --text "Interface (IFNAMES) $ifnamesiface added" 2>/dev/null
+			fi
+				
+			if [ -e /tmp/killswitch_$rnd.txt ]; then
+				rm /tmp/killswitch_$rnd.txt
+			fi
+		fi
+	done
+
+elif [ "$addinterface" = "Custom" ]; then
+	iface=`zenity --entry --title "Mullvad KillSwitch - Setup" --text "Interface à ajouter :" 2>/dev/null`
+	if [ "$iface" == "" ]; then
+		rm /etc/init.d/killswitch
+		zenity --error --title "Mullvad KillSwitch - Setup" --text "You had to choose!" --width 300 --height 150 2>/dev/null
+		exit 1
+	fi
+		
+	if [ "$portstcpapi" == "" ]; then
+		echo "iptables -A OUTPUT -o $iface -p udp -m multiport --dports $portsudp -d $ipaddresses -j ACCEPT
+iptables -A OUTPUT -o $iface -p tcp -m multiport --dports $portstcp -d $iptcpapi,$ipaddresses -j ACCEPT
+" >> /etc/init.d/killswitch
+	else
+		echo "iptables -A OUTPUT -o $iface -p udp -m multiport --dports $portsudp -d $ipaddresses -j ACCEPT
+iptables -A OUTPUT -o $iface -p tcp -m multiport --dports $portstcp,$portstcpapi -d $iptcpapi,$ipaddresses -j ACCEPT
+" >> /etc/init.d/killswitch
+	fi
+		
+	zenity --info --title "Mullvad KillSwitch - Setup" --text "Interface $iface added" 2>/dev/null
+
+elif [ "$addinterface" = "Exit" ]; then
+	break
+
+else
+	if [ -e /etc/init.d/killswitch ]; then
+		rm /etc/init.d/killswitch
+	fi
+	
+	exit 1	
+fi
+
+done
+	
+update-rc.d killswitch defaults
+bash /etc/init.d/killswitch
+
+############
+
+zenity --info --title "Mullvad KillSwitch - Setup" --text "Done" 2>/dev/null
+exit 0

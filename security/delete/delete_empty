@@ -1,0 +1,60 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-f|-d 'document.docx'|'docs/'] $end
+Details:
+-$cyan -f|-d 'document.docx'|'docs/'$end: you must choose a simple file or a folder
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+while getopts f:d: flag
+do
+	case "${flag}" in
+		f) thefile=${OPTARG};;
+		d) thefolder=${OPTARG};;
+	esac
+done
+
+############
+
+status_msg "Proceed the deletion"
+
+if [ -e "$thefile" ]; then
+	find "$thefile" -empty -type f -delete
+fi
+
+if [ -d "$thefolder" ]; then
+	find "$thefolder" -empty -type d -delete
+fi
+
+############
+
+status_msg "Done"
+exit 0

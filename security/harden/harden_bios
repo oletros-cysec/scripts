@@ -1,0 +1,219 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+status_msg "Delete old script if exists"
+
+if [ -e /etc/init.d/harden-dmi-footprint ]; then
+	update-rc.d /etc/init.d/harden-dmi-footprint remove
+	rm -f /etc/init.d/harden-dmi-footprint
+fi
+
+############
+
+status_msg "Create init script"
+
+echo '#!/bin/sh -e
+
+### BEGIN INIT INFO
+# Provides:          harden-dmi-footprint
+# Required-Start:    mountkernfs $local_fs urandom
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Harden DMI Footprint
+# Description:       Change DMI values using VirtualBox ones  
+### END INIT INFO
+
+if [ ! -d /boot/securebios ]; then
+	mkdir /boot/securebios
+fi
+
+genrndstr() {
+	tr -dc "A-Z0-9" < /dev/urandom | head -c"$1"
+}
+
+genrndnb() {
+	tr -dc "0-9" < /dev/urandom | head -c"$1"
+}
+
+assettag=`genrndstr "10"`
+
+echo "12/01/2006" > /boot/securebios/bios_date
+echo "0" > /boot/securebios/board_serial
+echo "$assettag" > /boot/securebios/board_asset_tag
+echo "MODALIAS=dmi:bvninnotekGmbH:bvrVirtualBox:bd12/01/2006:svninnotekGmbH:pnVirtualBox:pvr1.2:rvnOracleCorporation:rnVirtualBox:rvr1.2:cvnOracleCorporation:ct1:cvr:" > /boot/securebios/uevent
+echo "0" > /boot/securebios/product_serial
+echo "VirtualBox" > /boot/securebios/product_name
+echo "innotek GmbH" > /boot/securebios/sys_vendor
+echo "0" > /boot/securebios/runtime_active_time
+echo "0" > /boot/securebios/runtime_active_kids
+echo "0" > /boot/securebios/runtime_usage
+echo "unsupported" > /boot/securebios/runtime_status
+echo "disabled" > /boot/securebios/async
+echo "0" > /boot/securebios/runtime_suspended_time
+echo "disabled" > /boot/securebios/runtime_enabled
+echo "auto" > /boot/securebios/control
+echo "VirtualBox" > /boot/securebios/bios_version
+echo "1.2" > /boot/securebios/product_version
+echo "Oracle Corporation" > /boot/securebios/board_vendor
+echo "Virtual Machine" > /boot/securebios/product_family
+echo "`genrndstr "8"`-`genrndnb "4"`-`genrndstr "4"`-`genrndnb "4"`-`genrndstr "12"`" > /boot/securebios/product_uuid
+echo "innotek GmbH" > /boot/securebios/bios_vendor
+echo "1.2" > /boot/securebios/board_version
+echo "dmi:bvninnotekGmbH:bvrVirtualBox:bd12/01/2006:svninnotekGmbH:pnVirtualBox:pvr1.2:rvnOracleCorporation:rnVirtualBox:rvr1.2:cvnOracleCorporation:ct1:cvr:" > /boot/securebios/modalias
+echo "VirtualBox" > /boot/securebios/board_name
+echo "Oracle Corporation" > /boot/securebios/chassis_vendor
+echo "Laptop" > /boot/securebios/chassis_type
+echo "$assettag" > /boot/securebios/chassis_asset_tag
+echo "`genrndstr "8"`-`genrndnb "4"`-`genrndstr "4"`-`genrndnb "4"`-`genrndstr "12"`" > /boot/securebios/chassis_serial
+echo "1.2" > /boot/securebios/chassis_version
+echo "`genrndstr "8"`-`genrndnb "4"`-`genrndstr "4"`-`genrndnb "4"`-`genrndstr "12"`" > /boot/securebios/product_sku
+
+if [ -f /sys/devices/virtual/dmi/id/async ]; then
+	mount -o bind /boot/securebios/async /sys/devices/virtual/dmi/id/async
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/bios_date ]; then
+	mount -o bind /boot/securebios/bios_date /sys/devices/virtual/dmi/id/bios_date
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/bios_vendor ]; then
+	mount -o bind /boot/securebios/bios_vendor /sys/devices/virtual/dmi/id/bios_vendor
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/bios_version ]; then
+	mount -o bind /boot/securebios/bios_version /sys/devices/virtual/dmi/id/bios_version
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/board_name ]; then
+	mount -o bind /boot/securebios/board_name /sys/devices/virtual/dmi/id/board_name
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/board_serial ]; then
+	mount -o bind /boot/securebios/board_serial /sys/devices/virtual/dmi/id/board_serial
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/board_asset_tag ]; then
+	mount -o bind /boot/securebios/board_asset_tag /sys/devices/virtual/dmi/id/board_asset_tag
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/board_vendor ]; then
+	mount -o bind /boot/securebios/board_vendor /sys/devices/virtual/dmi/id/board_vendor
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/board_version ]; then
+	mount -o bind /boot/securebios/board_version /sys/devices/virtual/dmi/id/board_version
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/chassis_asset_tag ]; then
+	mount -o bind /boot/securebios/chassis_asset_tag /sys/devices/virtual/dmi/id/chassis_asset_tag
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/chassis_serial ]; then
+	mount -o bind /boot/securebios/chassis_serial /sys/devices/virtual/dmi/id/chassis_serial
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/chassis_type ]; then
+	mount -o bind /boot/securebios/chassis_type /sys/devices/virtual/dmi/id/chassis_type
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/chassis_vendor ]; then
+	mount -o bind /boot/securebios/chassis_vendor /sys/devices/virtual/dmi/id/chassis_vendor
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/chassis_version ]; then
+	mount -o bind /boot/securebios/chassis_version /sys/devices/virtual/dmi/id/chassis_version
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/modalias ]; then
+	mount -o bind /boot/securebios/modalias /sys/devices/virtual/dmi/id/modalias
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/product_family ]; then
+	mount -o bind /boot/securebios/product_family /sys/devices/virtual/dmi/id/product_family
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/product_name ]; then
+	mount -o bind /boot/securebios/product_name /sys/devices/virtual/dmi/id/product_name
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/product_serial ]; then
+	mount -o bind /boot/securebios/product_serial /sys/devices/virtual/dmi/id/product_serial
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/product_sku ]; then
+	mount -o bind /boot/securebios/product_sku /sys/devices/virtual/dmi/id/product_sku
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/product_uuid ]; then
+	mount -o bind /boot/securebios/product_uuid /sys/devices/virtual/dmi/id/product_uuid
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/product_version ]; then
+	mount -o bind /boot/securebios/product_version /sys/devices/virtual/dmi/id/product_version
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/runtime_active_time ]; then
+	mount -o bind /boot/securebios/runtime_active_time /sys/devices/virtual/dmi/id/runtime_active_time
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/runtime_active_kids ]; then
+	mount -o bind /boot/securebios/runtime_active_kids /sys/devices/virtual/dmi/id/runtime_active_kids
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/runtime_usage ]; then
+	mount -o bind /boot/securebios/runtime_usage /sys/devices/virtual/dmi/id/runtime_usage
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/sys_vendor ]; then
+	mount -o bind /boot/securebios/sys_vendor /sys/devices/virtual/dmi/id/sys_vendor
+fi
+
+if [ -f /sys/devices/virtual/dmi/id/uevent ]; then
+	mount -o bind /boot/securebios/uevent /sys/devices/virtual/dmi/id/uevent
+fi' > /etc/init.d/harden-dmi-footprint
+
+############
+
+status_msg "Enable script"
+
+chmod +x /etc/init.d/harden-dmi-footprint
+update-rc.d harden-dmi-footprint defaults
+
+############
+
+status_msg "Done"
+exit 0

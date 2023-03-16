@@ -1,0 +1,172 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c6`
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[+] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed!"
+	fi
+}
+
+need_root
+
+############
+
+isfdisk=false
+
+checkfdisk=`which fdisk`
+if [ "$checkfdisk" != "" ]; then
+	isfdisk=true
+fi
+
+if ($isfdisk); then
+	listmounted=`fdisk -l | grep 'Disk /dev/mapper/container-' | cut -d' ' -f2 | cut -d':' -f1`
+	if [ "$listmounted" == "" ]; then
+		mounted="/dev/mapper/test"
+	else
+		mounted="$listmounted"
+	fi
+else
+	mounted="/dev/mapper/test"
+fi
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-m|-u 'file.img'|'$mounted'] [-z 'user'] $end
+
+Details:
+$purple- Mount:$end
+	+$cyan -m 'file.img'$end: this option to mount the LUKS img file
+	+$cyan -z 'user'$end: user account to use
+$purple- Unmount:$end
+	+$cyan -u '$mounted'$end: this option to unmount the LUKS partition
+	+$cyan -z 'user'$end: user account to use
+
+$red* Note: You can only choose 1 option at a time$end
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isoptionm=false
+isoptionu=false
+
+while getopts m:u:z: flag
+do
+	case "${flag}" in
+		m) isoptionm=true; imgfile=${OPTARG};;
+		u) isoptionu=true; partition=${OPTARG};;
+		z) theuser=${OPTARG};;
+	esac
+done
+
+############
+
+if ($isoptionm) && ($isoptionu); then
+	error_msg "One option at a time can be used!"
+fi
+
+if ($isoptionm); then
+	if [ ! -e "$imgfile" ]; then
+		error_msg "Image file does not exists!"
+	fi
+
+	checkluks=`file "$imgfile" | grep 'LUKS encrypted file'`
+	if [ "$checkluks" == "" ]; then
+		error_msg "Image file is not LUKS!"
+	fi
+fi
+
+if ($isoptionu); then
+	checkpartition=`echo "$partition" | grep '/dev/mapper'`
+	if [ "$checkpartition" == "" ]; then
+		error_msg "Wrong partition format!"
+	else
+		rndstr=`basename "$partition"`
+	fi
+fi
+
+checkuser=`cat /etc/passwd | grep "$theuser:"`
+if [ "$checkuser" == "" ]; then
+	error_msg "User can't be found!"
+else
+	if [ "$imgfile" != "" ]; then
+		bname=`basename "$imgfile" | cut -d'.' -f1`
+		
+		mountpoint="`echo "$checkuser" | cut -d':' -f6`/containers/mountpoint/$bname"
+		if [ ! -d "$mountpoint" ]; then
+			mkdir -p "$mountpoint"
+			chown -R $theuser:$theuser "$mountpoint"
+		fi
+	else
+		mountpoint="`echo "$checkuser" | cut -d':' -f6`/containers/mountpoint/others"
+		if [ ! -d "$mountpoint" ]; then
+			mkdir -p "$mountpoint"
+			chown -R $theuser:$theuser "$mountpoint"
+		fi
+	fi
+fi
+
+############
+
+if ($isoptionm); then
+	status_msg "Mount partition"
+
+	cryptsetup -v luksOpen "$imgfile" "container-$rndstr"
+	mount /dev/mapper/container-$rndstr "$mountpoint"
+else
+	status_msg "Unmount partition"
+
+	mountpointsfolder="`echo "$checkuser" | cut -d':' -f6`/containers/mountpoint"
+	
+	for folder in `find "$mountpointsfolder" -mindepth 1 -maxdepth 1 -type d`
+	do
+		totalm=`ls -1l "$folder" | grep -Eo 'total [0-9]*' | cut -d' ' -f2`
+		if [ "$totalm" -gt "0" ]; then
+			mountpoint="$folder"
+			break
+		fi
+	done
+	
+	umount "$mountpoint"
+	cryptsetup -v luksClose $rndstr
+fi
+
+############
+
+status_msg "Done"
+
+############
+
+exit 0

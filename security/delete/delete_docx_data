@@ -1,0 +1,138 @@
+#!/bin/bash
+# root: n
+
+trollmode=false
+
+############
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+rndinterval=`echo $[$RANDOM%364]`
+rnddate=`date -u +"%Y-%m-%dT%H:%M:%SZ" --date "$rndinterval days ago"`
+
+appversion="`tr -dc "1-9" < /dev/urandom | head -c1`.`tr -dc "0-9" < /dev/urandom | head -c2`"
+
+############
+
+install_dep() {
+	checkdep=`which rename`
+	if [ "$checkdep" == "" ]; then
+		error_msg "Install manually rename"
+	fi
+}
+
+install_dep
+
+############
+
+install_dep() {
+	checkdep=`which 7za`
+	if [ "$checkdep" == "" ]; then
+		error_msg "Install manually p7zip-full"
+	fi
+}
+
+install_dep
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-f 'document.docx' -b 'US'] (-t) $end
+Details:
+-$cyan -f 'document.docx'$end: you must choose the document to use
+-$cyan -t$end: optionnaly you can enable troll mode
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+while getopts tf: flag
+do
+	case "${flag}" in
+		f) document=${OPTARG};;
+		t) trollmode=true;;
+	esac
+done
+
+if [ ! -e "$document" ] || [[ "$document" != *".docx"* ]]; then
+	error_msg "File does not exist or not a docx file!"
+fi
+
+############
+
+absolutepath=`readlink -f "$document"`
+folder=`dirname "$absolutepath"`
+rename 's; ;_;g' "$document"
+
+thefile=`echo "$document" | tr ' ' '_'`
+
+############
+
+status_msg "Extract informations of docx"
+	
+7z x "$thefile" -o/tmp/$rndstr 1>&2 2>/dev/null
+rm /tmp/$rndstr/docProps/*
+
+status_msg "Modify metadata of file"
+
+if ($trollmode); then
+	echo -e "$purple""Mode: troll""$end"
+	echo "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+	<Properties xmlns='http://schemas.openxmlformats.org/officeDocument/2006/extended-properties' xmlns:vt='http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes'><Template>Tres_Secret_Defense</Template><Pages>0</Pages><Words>0</Words><Characters>0</Characters><Application>DGSE</Application><DocSecurity>0</DocSecurity><Lines>0</Lines><Paragraphs>0</Paragraphs><ScaleCrop>false</ScaleCrop><Company>DGSE</Company><LinksUpToDate>false</LinksUpToDate><CharactersWithSpaces>0</CharactersWithSpaces><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>$appversion</AppVersion></Properties>" > /tmp/$rndstr/docProps/app.xml
+	
+	echo "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+	<cp:coreProperties xmlns:cp='http://schemas.openxmlformats.org/package/2006/metadata/core-properties' xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:dcterms='http://purl.org/dc/terms/' xmlns:dcmitype='http://purl.org/dc/dcmitype/' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'><dc:title>Très secret défense</dc:title><dc:subject></dc:subject><dc:creator>cert@inet.defense.gouv.fr</dc:creator><cp:keywords>tsd;cert</cp:keywords><cp:lastModifiedBy>DGSE</cp:lastModifiedBy><cp:revision>0</cp:revision><cp:lastPrinted>$rnddate</cp:lastPrinted><dcterms:created xsi:type='dcterms:W3CDTF'>$rnddate</dcterms:created><dcterms:modified xsi:type='dcterms:W3CDTF'>$rnddate</dcterms:modified></cp:coreProperties>" > /tmp/$rndstr/docProps/core.xml
+	
+else
+	echo -e "$purple""Mode: classic""$end"
+	
+	echo "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+	<Properties xmlns='http://schemas.openxmlformats.org/officeDocument/2006/extended-properties' xmlns:vt='http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes'><Template>Normal</Template><Pages>0</Pages><Words>0</Words><Characters>0</Characters><Application>Microsoft Office Word</Application><DocSecurity>0</DocSecurity><Lines>0</Lines><Paragraphs>0</Paragraphs><ScaleCrop>false</ScaleCrop><Company></Company><LinksUpToDate>false</LinksUpToDate><CharactersWithSpaces>0</CharactersWithSpaces><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>16.0000</AppVersion></Properties>" > /tmp/$rndstr/docProps/app.xml
+	
+	echo "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+	<cp:coreProperties xmlns:cp='http://schemas.openxmlformats.org/package/2006/metadata/core-properties' xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:dcterms='http://purl.org/dc/terms/' xmlns:dcmitype='http://purl.org/dc/dcmitype/' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'><dc:title></dc:title><dc:subject></dc:subject><dc:creator></dc:creator><cp:keywords></cp:keywords><cp:lastModifiedBy></cp:lastModifiedBy><cp:revision>0</cp:revision><cp:lastPrinted>$rnddate</cp:lastPrinted><dcterms:created xsi:type='dcterms:W3CDTF'>$rnddate</dcterms:created><dcterms:modified xsi:type='dcterms:W3CDTF'>$rnddate</dcterms:modified></cp:coreProperties>" > /tmp/$rndstr/docProps/core.xml
+fi
+
+status_msg "Recreate docx file"
+
+7za a -tzip "$folder"/$rndstr.zip /tmp/$rndstr/* 1>&2 2>/dev/null
+	
+if [ -d /tmp/$rndstr ]; then
+	rm -R /tmp/$rndstr
+fi
+
+status_msg "Replace original file"
+	
+mv "$folder"/$rndstr.zip "$thefile"
+
+############
+
+status_msg "Done"
+exit 0

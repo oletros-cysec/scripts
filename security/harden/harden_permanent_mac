@@ -1,0 +1,247 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+dt=`date +%F`
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		zenity --list --title "MAC Address Changer" --text "Root is needed using su. Run this script as root!" 2>/dev/null
+		exit 1
+	fi
+}
+
+need_root
+
+############
+
+install_dep() {
+	checkinitscripts=`dpkg -s initscripts | grep 'install ok installed'`
+	if [ "$checkinitscripts" == "" ]; then
+		apt install iniscripts
+	fi
+}
+
+install_dep
+
+############
+
+if [ -e /etc/network/interfaces ] && [ ! -e /etc/network/interfaces.bak ]; then
+	cp /etc/network/interfaces /etc/network/interfaces.bak
+fi
+
+if [ -e /etc/NetworkManager/NetworkManager.conf ] && [ ! -e /etc/NetworkManager/NetworkManager.conf.bak ]; then
+	cp /etc/NetworkManager/NetworkManager.conf /etc/NetworkManager/NetworkManager.conf.bak
+fi
+
+if [ ! -e /etc/udev/rules.d/01-harden-mac.rules ]; then
+	touch /etc/udev/rules.d/01-harden-mac.rules 
+else
+	echo '' > /etc/udev/rules.d/01-harden-mac.rules 
+fi
+
+if [ ! -e /etc/init.d/harden-mac ]; then
+	touch /etc/init.d/harden-mac
+else
+	update-rc.d /etc/init.d/harden-mac remove
+	rm /etc/init.d/harden-mac
+fi
+
+############
+
+echo "auto lo
+iface lo inet loopback" > /etc/network/interfaces
+
+echo '[main]
+plugins=ifupdown,device,connection,keyfile
+
+[ifupdown]
+managed=false
+
+[device]
+wifi.scan-rand-mac-address=yes
+ethernet.scan-rand-mac-address=yes
+
+[connection]
+wifi.cloned-mac-address=stable
+ethernet.cloned-mac-address=stable
+connection.stable-id=${CONNECTION}/${BOOT}
+
+[keyfile]
+unmanaged-devices=*,except:type:wifi,except:type:ethernet' > /etc/NetworkManager/NetworkManager.conf
+
+echo '#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          harden-mac
+# Required-Start:    mountkernfs $local_fs urandom
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# X-Interactive:     true
+# Short-Description: Harden MAC
+# Description:       Randomization of MAC addresse in /etc/udev/rules.d/
+### END INIT INFO
+
+' > /etc/init.d/harden-mac
+
+############
+
+localhost=`zenity --entry --title "MAC Address Changer" --text "Local interface (default value is lo):" 2>/dev/null`
+if [ "$localhost" == "" ]; then
+	localhost="lo"
+fi
+	
+vpntunnel=`zenity --entry --title "MAC Address Changer" --text "VPN interface (default value is tun):" 2>/dev/null`
+if [ "$vpntunnel" == "" ]; then
+	vpntunnel="tun"
+fi
+
+while [ "1" = "1" ]
+do
+
+theparameters=`zenity --list --title "MAC Address Changer" --text "Make your choice" --column Choice "All available" "Custom" "Exit" 2>/dev/null`
+
+if [ "$theparameters" = "All available" ]; then
+	for iface in `ifconfig | grep mtu | cut -d':' -f1 | uniq -i`
+	do
+		if [[ $iface != *$vpntunnel* ]] && [[ $iface != *$localhost* ]]; then
+			if [ -e /etc/NetworkManager/dispatcher.d/90secure-$iface.sh ]; then
+				rm /etc/NetworkManager/dispatcher.d/90secure-$iface.sh
+			fi
+			
+			echo '#!/bin/bash
+
+IF=$1
+STATUS=$2
+ 
+if [ "$IF" == "'"$iface"'" ]
+then
+    case "$2" in
+        pre-up)
+        /sbin/ip link set dev '"$iface"' address 00:00:00:00:00:01
+        macchanger -r '"$iface"'
+        macchanger -r '"$iface"'
+        ;;
+        *)
+        ;;
+    esac
+fi' >> /etc/NetworkManager/dispatcher.d/90secure-$iface.sh
+
+			constructeur=`macchanger -s "$iface" | grep "Permanent" | cut -c 16-32`
+			
+			echo "
+# Interface_$iface : 00:00:00:00:00:01
+#allow-auto $iface
+iface $iface inet dhcp
+	hwaddress ether 00:00:00:00:00:01
+	pre-up ifconfig $iface hw ether 00:00:00:00:00:01
+	up ifconfig $iface hw ether 00:00:00:00:00:01
+	post-down ifconfig $iface hw ether 00:00:00:00:00:01" >> /etc/network/interfaces
+	
+			test=`cat /etc/udev/rules.d/01-harden-mac.rules | grep "$iface"`
+			if [ "$test" == "" ]; then
+				echo "ACTION==\"add\", SUBSYSTEM==\"net\", ATTR{address}==\"$constructeur\", RUN+=\"/sbin/ip link set dev $iface address 00:00:00:00:00:01\"" >> /etc/udev/rules.d/01-harden-mac.rules
+			fi
+			
+			echo "macrandom$iface=\`tr -dc a-f0-9 < /dev/urandom | head -c 12 | sed -re \"s/.{2}/&:/g\" | sed -r \"$ s/.$//\"\`
+
+actueludev$iface=\`cat /etc/udev/rules.d/01-harden-mac.rules | grep $iface | cut -d' ' -f10 | cut -d'\"' -f1\`
+actuelni$iface=\`cat /etc/network/interfaces | grep Interface_$iface | cut -d' ' -f4\`
+
+sed -i \"s/\$actueludev$iface/\$macrandom$iface/g\" /etc/udev/rules.d/01-harden-mac.rules
+sed -i \"s/\$actuelni$iface/\$macrandom$iface/g\" /etc/network/interfaces" >> /etc/init.d/harden-mac
+			
+			zenity --info --title "MAC Address Changer" --text "Interface $iface added" 2>/dev/null
+		fi
+	done
+
+elif [ "$theparameters" = "Custom" ]; then
+	iface=`zenity --entry --title "MAC Address Changer" --text "Interface:" 2>/dev/null`
+	if [ "$iface" == "" ]; then
+		zenity --error --title "MAC Address Changer" --text "You had to choose!" 2>/dev/null
+		exit 1
+	fi
+	
+	if [ -e /etc/NetworkManager/dispatcher.d/90secure-$iface.sh ]; then
+		echo '' > /etc/NetworkManager/dispatcher.d/90secure-$iface.sh
+	fi
+	
+	echo '#!/bin/bash
+
+IF=$1
+STATUS=$2
+ 
+if [ "$IF" == "'"$iface"'" ]
+then
+    case "$2" in
+        pre-up)
+        /sbin/ip link set dev '"$iface"' address 00:00:00:00:00:01
+        macchanger -r '"$iface"'
+        macchanger -r '"$iface"'
+        ;;
+        *)
+        ;;
+    esac
+fi' >> /etc/NetworkManager/dispatcher.d/90secure-$iface.sh
+
+	constructeur=`macchanger -s "$iface" | grep "Permanent" | cut -c 16-32`
+	
+	echo "
+# Interface_$iface : 00:00:00:00:00:01
+#allow-auto $iface
+iface $iface inet dhcp
+	hwaddress ether 00:00:00:00:00:01
+	pre-up ifconfig $iface hw ether 00:00:00:00:00:01
+	up ifconfig $iface hw ether 00:00:00:00:00:01
+	post-down ifconfig $iface hw ether 00:00:00:00:00:01" >> /etc/network/interfaces
+	
+	test=`cat /etc/udev/rules.d/01-harden-mac.rules | grep "$iface"`
+	if [ "$test" == "" ]; then
+		echo "ACTION==\"add\", SUBSYSTEM==\"net\", ATTR{address}==\"$constructeur\", RUN+=\"/sbin/ip link set dev $iface address 00:00:00:00:00:01\"" >> /etc/udev/rules.d/01-harden-mac.rules
+	fi
+	
+	echo "macrandom$iface=\`tr -dc A-F0-9 < /dev/urandom | head -c 12 | sed -re \"s/.{2}/&:/g\" | sed -r \"$ s/.$//\"\`
+
+actueludev$iface=\`cat /etc/udev/rules.d/01-harden-mac.rules | grep $iface | cut -d' ' -f10 | cut -d'\"' -f1\`
+actuelni$iface=\`cat /etc/network/interfaces | grep Interface_$iface | cut -d' ' -f4\`
+
+sed -i \"s/\$actueludev$iface/\$macrandom$iface/g\" /etc/udev/rules.d/01-harden-mac.rules
+sed -i \"s/\$actuelni$iface/\$macrandom$iface/g\" /etc/network/interfaces" >> /etc/init.d/harden-mac
+	
+	zenity --info --title "MAC Address Changer" --text "Interface $iface added" 2>/dev/null
+
+elif [ "$theparameters" = "Exit" ]; then
+	break
+
+else
+	exit 1
+
+fi
+
+done
+
+############
+
+echo "
+exit 0" >> /etc/init.d/harden-mac
+
+############
+
+chmod +x /etc/init.d/harden-mac
+update-rc.d harden-mac defaults
+
+############
+
+zenity --info --title "MAC Address Changer" --text "Done" 2>/dev/null
+exit 0

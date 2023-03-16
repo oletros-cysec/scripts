@@ -1,0 +1,161 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+complete_msg() {
+	echo -e "$green""~> Complete""$end"
+}
+
+step_msg() {
+	echo -e "$blue""\nStep $1""$end"
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-f 'suspicious.pdf'] $end
+Details:
+-$cyan -f 'suspicious.pdf'$end: you must choose the file to scan
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+install_dep() {
+	checkdep=`which pdf-parser`
+	if [ "$checkdep" == "" ]; then
+		error_msg "Install manually pdf-parser"
+	fi
+}
+
+install_dep
+
+############
+
+ispdf=false
+
+while getopts f: flag
+do
+	case "${flag}" in
+		f) ispdf=true; thefile=${OPTARG};;
+	esac
+done
+
+############
+
+if ! ($ispdf) || [ ! -e "$thefile" ] || [[ "$thefile" != *".pdf"* ]]; then
+	usage
+fi
+
+############
+
+i=0
+j=1
+text=""
+
+step_msg $j
+
+pages=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/Page [[:digit:]]*' | cut -d' ' -f2`
+if [ "$pages" == "1" ]; then
+	text=$text"\n- only 1 page"
+	i=$((i + 2))
+fi
+
+let j=j+1
+complete_msg
+
+step_msg $j
+
+objstm=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/ObjStm [[:digit:]]*' | cut -d' ' -f2`
+if [ "$objstm" != "" ]; then
+	text=$text"\n- at least 1 obfuscated object"
+	i=$((i + 1))
+fi
+
+let j=j+1
+complete_msg
+
+step_msg $j
+
+js1=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/JS [[:digit:]]*' | cut -d' ' -f2`
+js2=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/JavaScript [[:digit:]]*' | cut -d' ' -f2`
+if [ "$js1" != "" ] || [ "$js2" != "" ]; then
+	text=$text"\n- javascript"
+	i=$((i + 3))
+fi
+
+let j=j+1
+complete_msg
+
+step_msg $j
+
+oa1=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/AA [[:digit:]]*' | cut -d' ' -f2`
+oa2=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/OpenAction [[:digit:]]*' | cut -d' ' -f2`
+if [ "$oa1" != "" ] || [ "$oa2" != "" ]; then
+	text=$text"\n- functions to execute code without user interactions"
+	i=$((i + 3))
+fi
+
+let j=j+1
+complete_msg
+
+step_msg $j
+
+jbig2decode=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/JBIG2Decode [[:digit:]]*' | cut -d' ' -f2`
+if [ "$jbig2decode" != "" ]; then
+	text=$text"\n- JBIG2 compression"
+	i=$((i + 2))
+fi
+
+let j=j+1
+complete_msg
+
+step_msg $j
+
+richmedia=`pdf-parser --stats "$thefile" 2>/dev/null | grep -o '/RichMedia [[:digit:]]*' | cut -d' ' -f2`
+if [ "$richmedia" != "" ]; then
+	text=$text"\n- flash content"
+	i=$((i + 1))
+fi
+
+let j=j+1
+complete_msg
+
+if [ "$i" == 0 ]; then
+	echo -e "$green""\nStatus: CLEAN""$end"
+else
+	if [ "$i" -gt "0" ] && [ "$i" -le "2" ]; then
+		echo -e "$orange""\nStatus: SUSPICIOUS""$end"
+	else
+		echo -e "$red""\nStatus: HIGHLY SUSPICIOUS""$end"
+	fi
+	
+	echo -e "\nSuspicious score on 12: ""$red""$i""$end""\nThis file contains:$text"
+fi
+
+############
+
+echo -e "$blue""\n[~] Done""$end"
+exit 0

@@ -1,0 +1,10 @@
+#!/bin/bash
+# root: n
+
+for file in `bleachbit -l | grep 'firefox'`
+do
+	bleachbit --clean $file
+done
+
+exit 0
+

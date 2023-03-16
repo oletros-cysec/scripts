@@ -1,0 +1,67 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rndstr=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-i 'docs/'] [-o 'docs.7z'] [-p 'aXnBxH0kpBA8cVcP']$end
+Details:
+-$cyan -i 'docs/'$end: folder to compress
+-$cyan -o 'docs.7z'$end: output archive file
+-$cyan -p 'aXnBxH0kpBA8cVcP'$end: password of the archive
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+ispass=false
+
+while getopts i:o:p: flag
+do
+	case "${flag}" in
+		i) input=${OPTARG};;
+		o) output=${OPTARG};;
+		p) ispass=true; password=${OPTARG};;
+	esac
+done
+
+############
+
+if ($ispass); then
+	argpass="-p$password"
+else
+	argpass=""
+fi
+
+############
+
+7z a "$output" "$input"/* $argpass
+
+############
+
+exit 0

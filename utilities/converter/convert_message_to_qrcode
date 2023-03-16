@@ -1,0 +1,63 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-i 'Hello World'] [-o 'output.png'] $end
+Details:
+-$cyan -i 'Hello World'$end: the message to convert
+-$cyan -o 'output.png'$end: image output filename expected
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isoutput=false
+
+while getopts i:o: flag
+do
+	case "${flag}" in
+		i) input=${OPTARG};;
+		o) isoutput=true; output=${OPTARG};;
+	esac
+done
+
+if [ -e "$output" ]; then
+	error_msg "Output file already exists!"
+fi
+
+############
+
+if ($isoutput); then
+	echo "$input" | qrencode -s 10 -o "$output"
+else
+	error_msg "Output filename expected!"
+fi
+
+############
+
+exit 0

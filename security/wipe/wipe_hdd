@@ -1,0 +1,103 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed using su. Run this script as root!"
+	fi
+}
+
+need_root
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-d '/dev/sda'] [-p 3] (-z) (-f) $end
+Details:
+-$cyan -d '/dev/sda'$end: you must define the mountpoint here
+-$cyan -p 3$end: here the number of passes. default value is 3
+-$cyan -z$end: optionnaly you can add one pass of zero value
+-$cyan -f$end: optionnaly you can enable forcemode
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isforce=false
+iszero=false
+ispasses=false
+
+while getopts d:f:z:p: flag
+do
+	case "${flag}" in
+		d) devicepoint=${OPTARG};;
+		f) isforce=true;;
+		z) iszero=true;;
+		p) ispasses=true; passes=${OPTARG};;
+	esac
+done
+
+status_msg "Check parameters"
+
+checkdevicepoint=`fdisk -l | grep "$devicepoint"`
+if [ "$checkdevicepoint" == "" ]; then
+	error_msg "Mountpoint not known!"
+if
+
+if [[ $passes =~ ^[\-0-9]+$ ]] && (( passes > 0 )) && [ "$passes" != "" ]; then
+	passes="$passes"
+else
+	passes="3"
+fi
+
+if ($isforce); then
+	force="-f"
+else
+	force=""
+fi
+
+if ($iszero); then
+	zero="-z"
+else
+	zero=""
+fi
+
+############
+
+status_msg "Launch secure deletion process"
+
+shred -v $force $zero -n $passes $checkdevicepoint
+
+############
+
+status_msg "Done"
+exit 0

@@ -1,0 +1,161 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		zenity --list --title "Secure Firefox" --text "Root is needed using su. Run this script as root!" 2>/dev/null
+		exit 1
+	fi
+}
+
+need_root
+
+############
+
+checkbox=`zenity --list --width 480 --height 600 --title "Secure Dconf" --text "What you want to do?" --checklist --column "Choice" --column "Options" TRUE "Disable automount" TRUE "Decrease potential leak" TRUE "Improve ScreenSaver" TRUE "Improve FileRoller" TRUE "Improve Gedit" TRUE "Improve Liferea" TRUE "Secure login" TRUE "Disable online accounts" TRUE "Disable GPS features" TRUE "Improve GNOME Terminal" TRUE "Improve File Chooser" TRUE "Disable trackers" TRUE "Improve GNOME Software" TRUE "Improve GNOME Shell" TRUE "Improve GNOME Nautilus" TRUE "Disable print" TRUE "Secure GNOME File-Sharing" TRUE "Secure GNOME TimeZone" --separator="|" 2>/dev/null`
+
+test=`echo $checkbox | grep "Disable automount"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.desktop.media-handling automount false
+	gsettings set org.gnome.desktop.media-handling automount-open false
+	gsettings set org.gnome.desktop.media-handling autorun-never true
+	gsettings set org.gnome.desktop.media-handling autorun-x-content-start-app '[]'
+	gsettings set org.gnome.desktop.media-handling autorun-x-content-open-folder '[]'
+	gsettings set org.gnome.desktop.media-handling autorun-x-content-ignore '[]'
+fi
+
+test=`echo $checkbox | grep "Decrease potential leak"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.desktop.privacy disable-camera true
+	gsettings set org.gnome.desktop.privacy disable-microphone true
+	gsettings set org.gnome.desktop.privacy usb-protection-level 'always'
+	gsettings set org.gnome.desktop.privacy usb-protection true
+	gsettings set org.gnome.desktop.privacy hide-identity true
+	gsettings set org.gnome.desktop.privacy recent-files-max-age 7
+	gsettings set org.gnome.desktop.privacy send-software-usage-stats false
+	gsettings set org.gnome.desktop.privacy remember-app-usage false
+	gsettings set org.gnome.desktop.privacy report-technical-problems false
+	gsettings set org.gnome.desktop.privacy old-files-age 8
+	gsettings set org.gnome.desktop.privacy remove-old-temp-files true
+	gsettings set org.gnome.desktop.privacy remove-old-trash-files true
+fi
+
+test=`echo $checkbox | grep "Improve ScreenSaver"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.desktop.screensaver show-full-name-in-top-bar false
+	gsettings set org.gnome.desktop.screensaver status-message-enabled false
+	gsettings set org.gnome.desktop.screensaver user-switch-enabled false
+fi
+
+test=`echo $checkbox | grep "Improve FileRoller"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.FileRoller.Dialogs.New default-extension '.zip'
+	gsettings set org.gnome.FileRoller.Dialogs.New encrypt-header true
+	gsettings set org.gnome.FileRoller.Dialogs.New expand-options true
+	gsettings set org.gnome.FileRoller.UI view-sidebar true
+	gsettings set org.gnome.FileRoller.General encrypt-header true
+fi
+
+test=`echo $checkbox | grep "Improve Gedit"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.gedit.preferences.editor auto-indent true
+	gsettings set org.gnome.gedit.preferences.editor auto-save-interval 5
+	gsettings set org.gnome.gedit.preferences.editor display-line-numbers true
+	gsettings set org.gnome.gedit.preferences.editor bracket-matching true
+	gsettings set org.gnome.gedit.preferences.editor display-line-numbers true
+	gsettings set org.gnome.gedit.preferences.editor scheme 'oblivion'
+fi
+
+test=`echo $checkbox | grep "Improve Liferea"`
+if [ "$test" != "" ]; then
+	gsettings set net.sf.liferea browser 'firefox %s'
+	gsettings set net.sf.liferea disable-javascript true
+	gsettings set net.sf.liferea do-not-track true
+	gsettings set net.sf.liferea enable-itp true
+	gsettings set net.sf.liferea maxitemcount 250
+fi
+
+test=`echo $checkbox | grep "Secure login"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.login-screen disable-user-list true
+	gsettings set org.gnome.login-screen enable-fingerprint-authentication false
+	gsettings set org.gnome.login-screen enable-smartcard-authentication false
+fi
+
+test=`echo $checkbox | grep "Disable online accounts"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.online-accounts whitelisted-providers ['']
+fi
+
+test=`echo $checkbox | grep "Disable GPS features"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.system.location max-accuracy-level 'country'
+	gsettings set org.gnome.system.location enabled false
+fi
+
+test=`echo $checkbox | grep "Improve GNOME Terminal"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.Terminal.Legacy.Settings confirm-close false
+fi
+
+test=`echo $checkbox | grep "Improve File Chooser"`
+if [ "$test" != "" ]; then
+	gsettings set org.gtk.Settings.FileChooser startup-mode 'cwd'
+	gsettings set org.gtk.Settings.FileChooser sort-directories-first true
+	gsettings set org.gtk.Settings.FileChooser show-hidden true
+fi
+
+test=`echo $checkbox | grep "Disable trackers"`
+if [ "$test" != "" ]; then
+	gsettings set org.freedesktop.Tracker3.Miner.Files index-applications false
+	gsettings set org.freedesktop.Tracker3.Miner.Files enable-monitors false
+fi
+
+test=`echo $checkbox | grep "Improve GNOME Software"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.software allow-updates false
+	gsettings set org.gnome.software download-updates false
+	gsettings set org.gnome.software download-updates-notify false
+	gsettings set org.gnome.software enable-repos-dialog false
+fi
+
+test=`echo $checkbox | grep "Improve GNOME Shell"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.shell remember-mount-password false
+fi
+
+test=`echo $checkbox | grep "Improve GNOME Nautilus"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.nautilus.preferences show-hidden-files true
+fi
+
+test=`echo $checkbox | grep "Disable print"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.desktop.lockdown disable-print-setup true
+	gsettings set org.gnome.desktop.lockdown disable-printing true
+fi
+
+test=`echo $checkbox | grep "Secure GNOME File-Sharing"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.desktop.file-sharing require-password 'always'
+fi
+
+test=`echo $checkbox | grep "Secure GNOME TimeZone"`
+if [ "$test" != "" ]; then
+	gsettings set org.gnome.desktop.datetime automatic-timezone false
+fi
+
+zenity --info --width 250 --height 75 --title "Secure Dconf" --text "Done" 2>/dev/null
+exit 0

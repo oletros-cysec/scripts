@@ -1,0 +1,138 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rnd=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+year=`date +%Y`
+
+############
+
+status_msg() {
+	echo -e "$purple""$1""$end"
+}
+
+############
+
+linuxurl="https://help.zscaler.com/zapi/fetch-data?url_alias=/client-connector/client-connector-app-release-summary-$year&view_type=full&cloud=false&domain=zscaler&applicable_category=3336&applicable_version=all&applicable_parent_version=&keyword=undefined&language=en&_format=json"
+
+windowsurl="https://help.zscaler.com/zapi/fetch-data?url_alias=/client-connector/client-connector-app-release-summary-$year&view_type=full&cloud=false&domain=zscaler&applicable_category=2891&applicable_version=all&applicable_parent_version=&keyword=undefined&language=en&_format=json"
+
+macurl="https://help.zscaler.com/zapi/fetch-data?url_alias=/client-connector/client-connector-app-release-summary-$year&view_type=full&cloud=false&domain=zscaler&applicable_category=2896&applicable_version=all&applicable_parent_version=&keyword=undefined&language=en&_format=json"
+
+############
+
+get_user_agent() {
+	uadefault=false
+	uaff=""
+	useragent=""
+	
+	checkesrfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-esr' | head -1`
+	checknightlyfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-nightly' | head -1`
+	
+	if [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="esr"
+	elif [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="nightly"
+	else
+		uadefault=true
+	fi
+	
+	if [ "$uaff" == "esr" ]; then
+		esrprefs="$checkesrfolder/prefs.js"
+		esrchekuaprefs=`cat "$esrprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$esrchekuaprefs" != "" ]; then
+			useragent="$esrchekuaprefs"
+		else
+			uadefault=true
+		fi
+	elif [ "$uaff" == "nightly" ]; then
+		nightlyprefs="$checknightlyfolder/prefs.js"
+		nightlychekuaprefs=`cat "$nightlyprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$nightlychekuaprefs" != "" ]; then
+			useragent="$nightlychekuaprefs"
+		else
+			uadefault=true
+		fi
+	else
+		uadefault=true
+	fi
+	
+	if ($uadefault) || [ "$useragent" == "" ]; then
+		useragent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
+	fi
+	
+	echo "$useragent"
+}
+
+useragent=`get_user_agent`
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-m|-z|-l]$end
+
+Details:
+-$cyan -m$end: download Zscaler Client Connector for Mac
+-$cyan -z$end: download Zscaler Client Connector for Windows
+-$cyan -l$end: download Zscaler Client Connector for Linux
+
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+ismac=false
+iswindows=false
+islinux=false
+
+while getopts mzl flag
+do
+	case "${flag}" in
+		m) ismac=true;;
+		z) iswindows=true;;
+		l) islinux=true;;
+	esac
+done
+
+############
+
+if ($islinux); then
+	version=`curl -L -s -A "$useragent" "$linuxurl" | jq .data.body.release_notes.entries | jq . | grep '"title": "Zscaler Client Connector' | cut -d'"' -f4 | cut -d' ' -f4 | head -1`
+	wget -q --show-progress -U "$useragent" --referer "https://download.virtualbox.org" -O "$HOME/Downloads/Zscaler-linux-$version-installer.run" "https://d32a6ru7mhaq0c.cloudfront.net/Zscaler-linux-$version-installer.run"
+fi
+
+if ($iswindows); then
+	version=`curl -L -s -A "$useragent" "$windowsurl" | jq .data.body.release_notes.entries | jq . | grep '"title": "Zscaler Client Connector' | cut -d'"' -f4 | cut -d' ' -f4 | head -1`
+	wget -q --show-progress -U "$useragent" --referer "https://download.virtualbox.org" -O "$HOME/Downloads/Zscaler-windows-$version-installer.exe" "https://d32a6ru7mhaq0c.cloudfront.net/Zscaler-windows-$version-installer.exe"
+fi
+
+if ($ismac); then
+	echo -e "$red""Mac is broken!""$end"
+#	version=`curl -L -s -A "$useragent" "$macurl" | jq .data.body.release_notes.entries | jq . | grep '"title": "Zscaler Client Connector' | cut -d'"' -f4 | cut -d' ' -f4 | head -1`
+#	wget -q --show-progress -U "$useragent" --referer "https://download.virtualbox.org" -O "$HOME/Downloads/Zscaler-osx-$version-installer.app.zip" "https://d32a6ru7mhaq0c.cloudfront.net/Zscaler-osx-$version-installer.app.zip"
+fi
+	
+status_msg "Available on $HOME/Downloads"
+
+############
+
+exit 0

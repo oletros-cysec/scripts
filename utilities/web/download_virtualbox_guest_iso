@@ -1,0 +1,93 @@
+#!/bin/bash
+# root: n
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+rnd=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
+
+############
+
+get_user_agent() {
+	uadefault=false
+	uaff=""
+	useragent=""
+	
+	checkesrfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-esr' | head -1`
+	checknightlyfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-nightly' | head -1`
+	
+	if [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="esr"
+	elif [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="nightly"
+	else
+		uadefault=true
+	fi
+	
+	if [ "$uaff" == "esr" ]; then
+		esrprefs="$checkesrfolder/prefs.js"
+		esrchekuaprefs=`cat "$esrprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$esrchekuaprefs" != "" ]; then
+			useragent="$esrchekuaprefs"
+		else
+			uadefault=true
+		fi
+	elif [ "$uaff" == "nightly" ]; then
+		nightlyprefs="$checknightlyfolder/prefs.js"
+		nightlychekuaprefs=`cat "$nightlyprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$nightlychekuaprefs" != "" ]; then
+			useragent="$nightlychekuaprefs"
+		else
+			uadefault=true
+		fi
+	else
+		uadefault=true
+	fi
+	
+	if ($uadefault) || [ "$useragent" == "" ]; then
+		useragent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
+	fi
+	
+	echo "$useragent"
+}
+
+useragent=`get_user_agent`
+
+############
+
+version=`zenity --entry --title "Download VirtualBox Guest ISO" --text "Desired version:" 2>/dev/null`
+if [ "$version" == "" ]; then
+	zenity --error --title "Download VirtualBox Guest ISO" --text "You had to choose!" 2>/dev/null
+	exit 1
+fi
+
+dossier=`zenity --file-selection --directory --title "Folder to save ISO file:"`
+
+curl -s -L -A "$useragent" -e "https://download.virtualbox.org" "https://download.virtualbox.org/virtualbox/$version/" -o /tmp/$rnd-virtualbox_guest_iso.txt
+
+checkifexist=`cat /tmp/$rnd-virtualbox_guest_iso.txt | grep 'Error Page 404'`
+if [ "$checkifexist" != "" ]; then
+	zenity --error --title "Download VirtualBox Guest ISO" --text "This version does not exist!" 2>/dev/null
+	exit 1
+else
+	wget -q --show-progress -U "$useragent" --referer "https://download.virtualbox.org" -O "$dossier/VirtualBox_Guest_Additions_$version.iso" "https://download.virtualbox.org/virtualbox/$version/VBoxGuestAdditions_$version.iso"
+fi
+
+if [ -e /tmp/$rnd-virtualbox_guest_iso.txt ]; then
+	rm /tmp/$rnd-virtualbox_guest_iso.txt
+fi
+
+############
+
+exit 0
