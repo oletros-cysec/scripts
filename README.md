@@ -1,4 +1,4 @@
-**Note: Ce projet n'est qu'un mirror du projet sur Gitlab: |https://gitlab.com/oletros_hardening/scripts](https://gitlab.com/oletros_hardening/scripts)**
+**Note: Ce projet n'est qu'un mirror du projet sur Gitlab: [https://gitlab.com/oletros_hardening/scripts](https://gitlab.com/oletros_hardening/scripts)**
 
 Ce projet est sous licence [Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/). 
 
