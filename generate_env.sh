@@ -36,12 +36,10 @@ check_root
 ############
 
 get_scripts() {
-	offensive=`find "$currentdir"/offensive/ -type f ! -iname '*.old'`
 	security=`find "$currentdir"/security/ -type f ! -iname '*.old'`
 	utilities=`find "$currentdir"/utilities/ -type f ! -iname '*.old'`
 	
-	echo "$offensive
-$security
+	echo "$security
 $utilities" > /tmp/$rndstr-scripts.txt
 	
 	while IFS='' read -r line || [[ -n "$line" ]]; do
