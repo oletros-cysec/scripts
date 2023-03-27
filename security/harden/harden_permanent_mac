@@ -29,7 +29,7 @@ need_root
 install_dep() {
 	checkinitscripts=`dpkg -s initscripts | grep 'install ok installed'`
 	if [ "$checkinitscripts" == "" ]; then
-		apt install iniscripts
+		apt install initscripts
 	fi
 }
 
