@@ -44,6 +44,15 @@ install_dep() {
 
 install_dep
 
+install_dep() {
+	checkinitscripts=`dpkg -s macchanger | grep 'install ok installed'`
+	if [ "$checkinitscripts" == "" ]; then
+		apt install macchanger
+	fi
+}
+
+install_dep
+
 ############
 
 if [ -e /etc/network/interfaces ] && [ ! -e /etc/network/interfaces.bak ]; then
