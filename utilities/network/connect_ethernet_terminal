@@ -11,6 +11,8 @@ cyan="\\e[1;96m"
 white="\\e[1;97m"
 end="\\e[0;0m"
 
+rndstr=`tr -dc "A-Z0-9" < /dev/urandom | head -c8`
+
 ############
 
 error_msg() {
@@ -18,46 +20,102 @@ error_msg() {
 	exit 1
 }
 
+info_msg() {
+	echo -e "$purple""$1""$end"
+}
+
 status_msg() {
 	echo -e "$blue""\n[~] $1""$end"
 }
 
-############
-
-usage() {
-	echo -e "$purple
-Usage: $0 [-f|-d 'document'|'docs/'] $end
-Details:
--$cyan -f|-d 'document'|'docs/'$end: you must choose a simple file or a folder
-$end"
-	exit 0
+mini_msg() {
+	echo -e "$cyan""\t-> $1""$end"
 }
 
-if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-	usage
+############
+
+dep=`which nmcli`
+if [ "$dep" == "" ]; then
+	error_msg "This script is made to connect manually saved networks on network-manager!"
 fi
 
 ############
 
-while getopts f:d: flag
-do
-	case "${flag}" in
-		f) thefile=${OPTARG};;
-		d) thefolder=${OPTARG};;
-	esac
+status_msg "List all saved connections"
+
+nmcli -t -m tabular c show | sed '/UUID/d' > /tmp/connections_$rndstr.txt
+
+############
+
+status_msg "Parse all connections"
+
+i=1
+profile=()
+uuid=()
+types=()
+device=()
+
+while IFS='' read -r line || [[ -n "$line" ]]; do
+	mini_msg "Connection: $i"
+	
+	profiletmp=`echo "$line" | cut -d':' -f1`
+	uuidtmp=`echo "$line" | cut -d':' -f2`
+	typestmp=`echo "$line" | cut -d':' -f3`
+	devicetmp=`echo "$line" | cut -d':' -f4`
+	
+	profile+=("$profiletmp")
+	uuid+=("$uuidtmp")
+	types+=("$typestmp")
+	device+=("$devicetmp")
+	
+	let i=i+1
+done < /tmp/connections_$rndstr.txt
+
+############
+
+status_msg "List all connections"
+
+countuuid=`echo ${#uuid[@]}`
+choice=""
+
+z=1
+n=0
+
+while [ "$z" -le "$countuuid" ]; do
+	n=`echo "$z - 1" | bc`
+	
+	if [ "$choice" == "" ]; then
+		choice="\n$z. ${profile[$n]} (Type: ${types[$n]} | Device: ${device[$n]})\n"
+	else
+		choice="$choice$z. ${profile[$n]} (Type: ${types[$n]} | Device: ${device[$n]})\n"
+	fi
+	
+	let z=z+1
 done
 
+choice="$choice\nPlease choose the connection you want to use using the integer: "
+
+echo -e -n "$choice"
+read answer
+
+if [[ $answer =~ ^[0-9]+$ ]]; then
+	theindex=`echo "$answer - 1" | bc`
+	
+	check="${profile[$theindex]}"
+	if [ "$check" == "" ]; then
+		error_msg "Your choice is incorrect!"
+	fi
+	
+	info_msg "\nProfile chosen:\n\nName: ${profile[$theindex]}\nUUID: ${uuid[$theindex]}\nType: ${types[$theindex]}\nDevice: ${device[$theindex]}"
+else
+	error_msg "The answer is not an integer!"
+fi
+
 ############
 
-status_msg "Proceed the deletion of metadatas"
+status_msg "Connect the profile"
 
-if [ -e "$thefile" ]; then
-	exiftool -v -all:all= -overwrite_original "$thefile"
-fi
-
-if [ -d "$thefolder" ]; then
-	exiftool -v -all:all= -r -overwrite_original "$thefolder"/*
-fi
+nmcli c up ${uuid[$theindex]}
 
 ############
 
