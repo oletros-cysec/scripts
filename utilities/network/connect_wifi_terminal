@@ -18,17 +18,43 @@ error_msg() {
 	exit 1
 }
 
+warning_msg() {
+	echo -e "$orange""$1""$end"
+}
+
+success_msg() {
+	echo -e "$green""$1""$end"
+}
+
 status_msg() {
 	echo -e "$blue""\n[~] $1""$end"
 }
 
 ############
 
+dep=`which nmcli`
+if [ "$dep" == "" ]; then
+	error_msg "This script is made to connect manually saved networks on network-manager!"
+fi
+
+checknetwork=`nmcli radio wifi | grep 'enabled'`
+if [ "$checknetwork" == "" ]; then
+	nmcli radio wifi on
+	
+	checknetwork=`nmcli radio wifi | grep 'enabled'`
+	if [ "$checknetwork" == "" ]; then
+		error_msg "Try to enable wifi card manually. This command can help you: 'nmcli radio wifi on'"
+	fi
+fi
+
+############
+
 usage() {
 	echo -e "$purple
-Usage: $0 [-f|-d 'document'|'docs/'] $end
+Usage: $0 [-n 'WifiName'] [-p 'MyWifiSuperPassword']$end
 Details:
--$cyan -f|-d 'document'|'docs/'$end: you must choose a simple file or a folder
+-$cyan -n 'WifiName'$end: the SSID (name) of the Access point you want to connect to. If you don't know it, try the command: 'nmcli dev wifi list'
+-$cyan -p 'MyWifiSuperPassword'$end: password of the Access point
 $end"
 	exit 0
 }
@@ -39,24 +65,33 @@ fi
 
 ############
 
-while getopts f:d: flag
+while getopts n:p: flag
 do
 	case "${flag}" in
-		f) thefile=${OPTARG};;
-		d) thefolder=${OPTARG};;
+		n) ssid=${OPTARG};;
+		p) password=${OPTARG};;
 	esac
 done
+
+if [ "$ssid" == "" ] || [ "$password" == "" ]; then
+	usage
+fi
 
 ############
 
 status_msg "Proceed the deletion of metadatas"
 
-if [ -e "$thefile" ]; then
-	exiftool -v -all:all= -overwrite_original "$thefile"
-fi
+nmcli dev wifi connect "$ssid" password "$password"
 
-if [ -d "$thefolder" ]; then
-	exiftool -v -all:all= -r -overwrite_original "$thefolder"/*
+############
+
+status_msg "Check the connection"
+
+ipaddr=`curl "ifconfig.me"`
+if [ "$ipaddr" == "" ]; then
+	warning_msg "Connection: FAILED"
+else
+	success_msg "Connection: OK"
 fi
 
 ############
