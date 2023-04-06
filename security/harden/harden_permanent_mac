@@ -27,8 +27,8 @@ need_root
 ############
 
 install_dep() {
-	checkinitscripts=`dpkg -s initscripts | grep 'install ok installed'`
-	if [ "$checkinitscripts" == "" ]; then
+	checkdep=`dpkg -s initscripts | grep 'install ok installed'`
+	if [ "$checkdep" == "" ]; then
 		apt install initscripts
 	fi
 }
@@ -36,8 +36,8 @@ install_dep() {
 install_dep
 
 install_dep() {
-	checkinitscripts=`dpkg -s ifconfig | grep 'install ok installed'`
-	if [ "$checkinitscripts" == "" ]; then
+	checkdep=`which ifconfig`
+	if [ "$checkdep" == "" ]; then
 		apt install net-tools
 	fi
 }
