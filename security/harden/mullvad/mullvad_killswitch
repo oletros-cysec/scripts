@@ -1,7 +1,12 @@
 #!/bin/bash
 # root: y
 
-renewips=true # renew all ip addresses
+############
+
+# Old Values
+
+# old backup DNS: 193.138.218.74
+# old api port: 1234
 
 ############
 
@@ -16,7 +21,6 @@ white="\\e[1;97m"
 end="\\e[0;0m"
 
 rnd=`tr -dc "a-z0-9" < /dev/urandom | head -c16`
-scriptfolder=`pwd "$0"`
 
 ############
 
@@ -40,7 +44,7 @@ install_dep() {
 	
 	checkinitscripts=`dpkg -s initscripts | grep 'install ok installed'`
 	if [ "$checkinitscripts" == "" ]; then
-		apt install iniscripts
+		apt install initscripts
 	fi
 	
 	checkinitscripts=`dpkg -s jq | grep 'install ok installed'`
@@ -53,21 +57,134 @@ install_dep
 
 ############
 
+get_user_agent() {
+	uadefault=false
+	uaff=""
+	useragent=""
+	
+	checkesrfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-esr' | head -1`
+	checknightlyfolder=`find $HOME/.mozilla/firefox -type d -name '*.default-nightly' | head -1`
+	
+	if [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="esr"
+	elif [ "$checkesrfolder" != "" ]; then
+		uadefault=false
+		uaff="nightly"
+	else
+		uadefault=true
+	fi
+	
+	if [ "$uaff" == "esr" ]; then
+		esrprefs="$checkesrfolder/prefs.js"
+		esrchekuaprefs=`cat "$esrprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$esrchekuaprefs" != "" ]; then
+			useragent="$esrchekuaprefs"
+		else
+			uadefault=true
+		fi
+	elif [ "$uaff" == "nightly" ]; then
+		nightlyprefs="$checknightlyfolder/prefs.js"
+		nightlychekuaprefs=`cat "$nightlyprefs" | grep 'user_pref("devtools.responsive.userAgent"' | cut -d'"' -f4`
+		
+		if [ "$nightlychekuaprefs" != "" ]; then
+			useragent="$nightlychekuaprefs"
+		else
+			uadefault=true
+		fi
+	else
+		uadefault=true
+	fi
+	
+	if ($uadefault) || [ "$useragent" == "" ]; then
+		useragent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
+	fi
+	
+	echo "$useragent"
+}
+
+useragent=`get_user_agent`
+
+############
+
+function_status_msg() {
+	echo -e "$purple""\t~> $1""$end"
+}
+
+############
+
+get_openvpn_list_ip() {
+	function_status_msg "Get all relays"
+	
+	curl -L -s -A "$useragent" "https://api.mullvad.net/www/relays/all/" > /tmp/relays_$rnd.txt
+	
+	function_status_msg "Extract good ones"
+	
+	ips=""
+	ipbs=""
+	i=1
+
+	while (true)
+	do
+		echo -e "$purple""Entry $i""$end"
+		
+		active=`cat /tmp/relays_$rnd.txt | jq .[$i].active | sed 's;";;g'`
+		type=`cat /tmp/relays_$rnd.txt | jq .[$i].type | sed 's;";;g'`
+		hostnamebr=`cat /tmp/relays_$rnd.txt | jq .[$i].hostname | sed 's;";;g' | grep -Eo "\-.*\-br\-.*"`
+		
+		if [ "$hostnamebr" != "" ] && [ "$type" == "bridge" ]; then
+			echo -e "$cyan""Bridge""$end"
+			
+			actualipb=`cat /tmp/relays_$rnd.txt | jq .[$i].ipv4_addr_in | sed 's;";;g'`
+			
+			if [ "$ipbs" == "" ]; then
+				ipbs="$actualipb"
+			else
+				ipbs="$ipbs,$actualipb"
+			fi
+		fi
+		
+		if [ "$active" == "true" ] && [ "$type" == "openvpn" ]; then
+			echo -e "$green""OK""$end"
+			
+			actualip=`cat /tmp/relays_$rnd.txt | jq .[$i].ipv4_addr_in | sed 's;";;g'`
+			
+			if [ "$ips" == "" ]; then
+				ips="$actualip"
+			else
+				ips="$ips,$actualip"
+			fi
+		elif [ "$active" == "null" ]; then
+			echo -e "$orange""End""$end"
+			break
+		else
+			echo -e "$red""KO""$end"
+		fi
+		
+		let i=i+1
+	done
+	
+	function_status_msg "Save the result in temp file"
+	
+	echo "$ips" > /tmp/mullvad_ips_$rnd.txt
+	echo "$ipbs" > /tmp/mullvad_ipbs_$rnd.txt
+}
+
+get_openvpn_list_ip
+
+############
+
+ipbs=`cat "/tmp/mullvad_ipbs_$rnd.txt"`
+
 # Ports are not supposed to be changed
 portsudp="53,1194,1195,1196,1197,1300,1301,1302"
 portstcp="53,443"
 
-# old backup DNS: 193.138.218.74
-# dnsbackup=""
-
-# api.mullvad.net to logon | needed in versions > 2022.1
-
-# old api port: 1234
 portstcpapi=""
 
 # doh.mullvad.net has address 194.242.2.2
-# old api IPs: 45.83.220.117,185.65.134.66
-iptcpapi="45.83.223.193,45.83.222.100,194.242.2.2"
+iptcpapi="$ipbs,194.242.2.2"
 
 ############
 
@@ -80,17 +197,7 @@ fi
 
 ############
 
-generate_list() {
-	bash "$scriptfolder"/mullvad_openvpn_list_ip
-}
-
-############
-
-if [ ! -e "$scriptfolder/configuration.txt" ] || ($renewips); then
-	generate_list
-fi
-
-ipaddresses=`cat "$scriptfolder/configuration.txt"`
+ipaddresses=`cat "/tmp/mullvad_ips_$rnd.txt"`
 
 ############
 
@@ -229,6 +336,16 @@ done
 	
 update-rc.d killswitch defaults
 bash /etc/init.d/killswitch
+
+############
+
+if [ -e /tmp/mullvad_ips_$rnd.txt ]; then
+	rm /tmp/mullvad_ips_$rnd.txt
+fi
+
+if [ -e /tmp/mullvad_ipbs_$rnd.txt ]; then
+	rm /tmp/mullvad_ipbs_$rnd.txt
+fi
 
 ############
 
