@@ -22,6 +22,10 @@ status_msg() {
 	echo -e "$blue""\n[~] $1""$end"
 }
 
+info_msg() {
+	echo -e "$cyan""$1""$end"
+}
+
 ############
 
 need_root() {
@@ -32,7 +36,29 @@ need_root() {
 
 need_root
 
-########################
+############
+
+status_msg "Check dependencies"
+
+install_dep() {
+	checkdep=`which dirmngr`
+	if [ "$checkdep" == "" ]; then
+		apt install dirmngr
+	fi
+}
+
+install_dep
+
+install_dep() {
+	checkdep=`which gpg-agent`
+	if [ "$checkdep" == "" ]; then
+		apt install gpg-agent
+	fi
+}
+
+install_dep
+
+############
 
 usage() {
 	echo -e "$purple
@@ -165,6 +191,8 @@ Pin-Priority: 101' > /etc/apt/preferences.d/kali
 	echo "
 # Kali
 deb https://http.kali.org/kali kali-rolling main contrib" >> /etc/apt/sources.list
+	
+	info_msg "This step can be a bit long... Please wait.."
 	
 	gpg --recv-key ED444FF07D8D0BF6
 	gpg --keyserver pgp.mit.edu --recv-key ED444FF07D8D0BF6
