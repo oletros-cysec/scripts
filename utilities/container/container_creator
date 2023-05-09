@@ -136,7 +136,7 @@ cryptsetup -v luksOpen "$containerfile" "$rndstr"
 
 status_msg "Mount partition"
 
-mkfs.ext4 /dev/mapper/$rndstr
+mkfs.ext2 /dev/mapper/$rndstr
 mount /dev/mapper/$rndstr "$mountpoint"
 
 status_msg "Give good rights to partition"
