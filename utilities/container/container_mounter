@@ -44,7 +44,7 @@ if [ "$checkfdisk" != "" ]; then
 fi
 
 if ($isfdisk); then
-	listmounted=`fdisk -l | grep 'Disk /dev/mapper/container-' | cut -d' ' -f2 | cut -d':' -f1`
+	listmounted=`fdisk -l | grep 'Disk /dev/mapper/container-' | cut -d' ' -f2 | cut -d':' -f1 | tr '\n' '|' | sed 's;|$;;g'`
 	if [ "$listmounted" == "" ]; then
 		mounted="/dev/mapper/test"
 	else
@@ -58,7 +58,7 @@ fi
 
 usage() {
 	echo -e "$purple
-Usage: $0 [-m|-u 'file.img'|'$mounted'] [-z 'user'] $end
+Usage: $0 [-m|-u 'file.img'|'$mounted'] (-z 'user') $end
 
 Details:
 $purple- Mount:$end
@@ -66,6 +66,7 @@ $purple- Mount:$end
 	+$cyan -z 'user'$end: user account to use
 $purple- Unmount:$end
 	+$cyan -u '$mounted'$end: this option to unmount the LUKS partition
+	+$cyan -a$end: unmount all
 	+$cyan -z 'user'$end: user account to use
 
 $red* Note: You can only choose 1 option at a time$end
@@ -81,13 +82,16 @@ fi
 
 isoptionm=false
 isoptionu=false
+isuser=false
+isunmountall=false
 
-while getopts m:u:z: flag
+while getopts m:u:z:a flag
 do
 	case "${flag}" in
 		m) isoptionm=true; imgfile=${OPTARG};;
 		u) isoptionu=true; partition=${OPTARG};;
-		z) theuser=${OPTARG};;
+		z) isuser=true; theuser=${OPTARG};;
+		a) isunmountall=true;;
 	esac
 done
 
@@ -117,23 +121,35 @@ if ($isoptionu); then
 	fi
 fi
 
-checkuser=`cat /etc/passwd | grep "$theuser:"`
-if [ "$checkuser" == "" ]; then
-	error_msg "User can't be found!"
+if ! ($isuser); then
+	defaultuser=`cat /etc/passwd | grep '1000:1000'`
+	
+	theuser=`echo "$defaultuser" | cut -d':' -f1`
+	theuserhome=`echo "$defaultuser" | cut -d':' -f6`
+	
+	bname=`basename "$imgfile" | cut -d'.' -f1`
+	
+	mountpoint="$theuserhome/containers/mountpoint/$bname"
+	if [ ! -d "$mountpoint" ]; then
+		mkdir -p "$mountpoint"
+		chown -R $theuser:$theuser "$mountpoint"
+	fi
 else
-	if [ "$imgfile" != "" ]; then
-		bname=`basename "$imgfile" | cut -d'.' -f1`
-		
-		mountpoint="`echo "$checkuser" | cut -d':' -f6`/containers/mountpoint/$bname"
-		if [ ! -d "$mountpoint" ]; then
-			mkdir -p "$mountpoint"
-			chown -R $theuser:$theuser "$mountpoint"
-		fi
+	checkuser=`cat /etc/passwd | grep "$theuser:"`
+	if [ "$checkuser" == "" ]; then
+		error_msg "User can't be found!"
 	else
-		mountpoint="`echo "$checkuser" | cut -d':' -f6`/containers/mountpoint/others"
-		if [ ! -d "$mountpoint" ]; then
-			mkdir -p "$mountpoint"
-			chown -R $theuser:$theuser "$mountpoint"
+		if [ "$imgfile" != "" ]; then
+			bname=`basename "$imgfile" | cut -d'.' -f1`
+			
+			theuserhome=`echo "$checkuser" | cut -d':' -f6`
+			mountpoint="$theuserhome/containers/mountpoint/$bname"
+			if [ ! -d "$mountpoint" ]; then
+				mkdir -p "$mountpoint"
+				chown -R $theuser:$theuser "$mountpoint"
+			fi
+		else
+			error_msg "Image file does not exists!"
 		fi
 	fi
 fi
@@ -147,20 +163,31 @@ if ($isoptionm); then
 	mount /dev/mapper/container-$rndstr "$mountpoint"
 else
 	status_msg "Unmount partition"
-
-	mountpointsfolder="`echo "$checkuser" | cut -d':' -f6`/containers/mountpoint"
 	
-	for folder in `find "$mountpointsfolder" -mindepth 1 -maxdepth 1 -type d`
-	do
-		totalm=`ls -1l "$folder" | grep -Eo 'total [0-9]*' | cut -d' ' -f2`
-		if [ "$totalm" -gt "0" ]; then
-			mountpoint="$folder"
-			break
-		fi
-	done
+	mountpointsfolder="$theuserhome/containers/mountpoint"
 	
-	umount "$mountpoint"
-	cryptsetup -v luksClose $rndstr
+	if ! ($isunmountall); then
+		for folder in `find "$mountpointsfolder" -mindepth 1 -maxdepth 1 -type d`
+		do
+			totalm=`ls -1l "$folder" | grep -Eo 'total [0-9]*' | cut -d' ' -f2`
+			if [ "$totalm" -gt "0" ]; then
+				mountpoint="$folder"
+				break
+			fi
+		done
+		
+		umount "$mountpoint"
+		cryptsetup -v luksClose $rndstr
+	else
+		for containerpm in `fdisk -l | grep '/dev/mapper/container-' | cut -d' ' -f2 | cut -d':' -f1`
+		do
+			namep=`basename "$containerpm"`
+			mpcontainer=`findmnt "$containerpm" | tail -1 | cut -d' ' -f1`
+			
+			umount "$mpcontainer"
+			cryptsetup -v luksClose $namep
+		done
+	fi
 fi
 
 ############
