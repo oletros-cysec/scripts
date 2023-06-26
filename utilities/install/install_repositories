@@ -22,10 +22,6 @@ status_msg() {
 	echo -e "$blue""\n[~] $1""$end"
 }
 
-info_msg() {
-	echo -e "$cyan""$1""$end"
-}
-
 ############
 
 need_root() {
@@ -35,28 +31,6 @@ need_root() {
 }
 
 need_root
-
-############
-
-status_msg "Check dependencies"
-
-install_dep() {
-	checkdep=`which dirmngr`
-	if [ "$checkdep" == "" ]; then
-		apt install dirmngr
-	fi
-}
-
-install_dep
-
-install_dep() {
-	checkdep=`which gpg-agent`
-	if [ "$checkdep" == "" ]; then
-		apt install gpg-agent
-	fi
-}
-
-install_dep
 
 ############
 
@@ -192,8 +166,6 @@ Pin-Priority: 101' > /etc/apt/preferences.d/kali
 # Kali
 deb https://http.kali.org/kali kali-rolling main contrib" >> /etc/apt/sources.list
 	
-	info_msg "This step can be a bit long... Please wait.."
-	
 	gpg --recv-key ED444FF07D8D0BF6
 	gpg --keyserver pgp.mit.edu --recv-key ED444FF07D8D0BF6
 	gpg --keyserver pool.sks-keyservers.net --recv-key ED444FF07D8D0BF6
@@ -230,6 +202,17 @@ Pin-Priority: 101' > /etc/apt/preferences.d/signal
 	echo "
 # Signal
 deb [arch=amd64 signed-by=/usr/share/keyrings/signal-desktop-keyring.gpg] https://updates.signal.org/desktop/apt xenial main" >> /etc/apt/sources.list
+
+	echo '[Desktop Entry]
+Name=Signal
+Exec=/opt/Signal/signal-desktop --use-tray-icon %U
+Terminal=false
+Type=Application
+Icon=signal-desktop
+StartupWMClass=Signal
+Comment=Private messaging from your desktop
+MimeType=x-scheme-handler/sgnl;x-scheme-handler/signalcaptcha;
+Categories=Network;InstantMessaging;Chat;' > /usr/share/applications/signal-desktop.desktop
 fi
 
 if ($ismega); then
@@ -239,7 +222,10 @@ Pin-Priority: 101' > /etc/apt/preferences.d/mega
 	
 	echo "
 # Mega
-deb [signed-by=/usr/share/keyrings/meganz-archive-keyring.gpg] https://mega.nz/linux/repo/Debian_testing/ ./" >> /etc/apt/sources.list
+deb https://mega.nz/linux/repo/Debian_testing/ ./" >> /etc/apt/sources.list
+	
+	gpg --keyserver keyserver.ubuntu.com --recv-key 1A664B787094A482
+	gpg -a --export 1A664B787094A482 | apt-key add -
 fi
 
 ############

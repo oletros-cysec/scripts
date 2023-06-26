@@ -1,0 +1,93 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed!"
+	fi
+}
+
+need_root
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 (-e) (-u) (-g) (-c)$end
+Details:
+-$cyan -e$end: install web packages
+-$cyan -u$end: install utilities packages
+-$cyan -g$end: install gnome improver packages
+-$cyan -c$end: install cleaners packages
+$end"
+	exit 0
+}
+
+if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isweb=false
+isutilities=false
+isgnomeimprove=false
+iscleaners=false
+
+while getopts eugc flag
+do
+	case "${flag}" in
+		e) isweb=true;;
+		u) isutilities=true;;
+		g) isgnomeimprove=true;;
+		c) iscleaners=true;;
+	esac
+done
+
+############
+
+status_msg "Install packages"
+
+if ($isweb); then
+	apt install git firefox-esr
+fi
+
+if ($isgnomeimprove); then
+	apt install dconf-editor gnome-tweaks gnome-browser-connector file-roller p7zip-full imagemagick gedit
+fi
+
+if ($isutilities); then
+	apt install terminator vlc liferea apostrophe hardinfo synaptic macchanger keepassxc flameshot
+fi
+
+if ($iscleaners); then
+	apt install exiftool mat2 bleachbit
+fi
+
+############
+
+status_msg "Done"
+exit 0

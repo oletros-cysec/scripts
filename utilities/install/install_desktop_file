@@ -1,0 +1,152 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+info_msg() {
+	echo -e "$cyan""$1""$end"
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed!"
+	fi
+}
+
+need_root
+
+############
+
+usage() {
+	echo -e "$purple
+Usage: $0 [-u 'user|root'] [-n 'Telegram'] [-e '/home/user/tools/telegram/telegram'] (-t) [-i '/home/user/tools/telegram/telegram.png'] (-c 'Private messaging from your desktop')$end
+Details:
+-$cyan -u 'user|root'$end: create desktop file as an user or as root
+-$cyan -n 'Telegram'$end: the name of the application
+-$cyan -e '/home/user/tools/telegram/telegram'$end: the absolute path to the executable
+-$cyan -t$end: use if the application need terminal
+-$cyan -i '/home/user/tools/telegram/telegram.png'$end: the absolute path to an image used for icon. The perfect size is a square of 128pixels.
+-$cyan -c 'Private messaging from your desktop'$end: the comment value to used
+$end"
+	exit 0
+}
+
+if [[ ${#} -eq '' ]] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+
+############
+
+isterminal=false
+
+userexist=false
+nameexist=false
+execexist=false
+iconexist=false
+
+commentexist=false
+
+while getopts u:n:e:ti:c: flag
+do
+	case "${flag}" in
+		u) userexist=true; user=${OPTARG};;
+		n) nameexist=true; name=${OPTARG};;
+		e) execexist=true; exec=${OPTARG};;
+		t) isterminal=true;;
+		i) iconexist=true; icon=${OPTARG};;
+		c) commentexist=true; comment=${OPTARG};;
+	esac
+done
+
+if ! ($userexist) || ! ($nameexist) || ! ($execexist) || ! ($iconexist); then
+	error_msg "Missing mandatory arguments!"
+fi
+
+if ! ($commentexist); then
+	comment=""
+fi
+
+############
+
+status_msg "Init user configuration"
+
+if [ "$user" == "root" ]; then
+	info_msg "User: root"
+	
+	user="root"
+	destfolder="/usr/share/applications"
+else
+	checkexists=`cat /etc/passwd | grep "$user"`
+	checkhomeexists=`cat /etc/passwd | grep "$user" | cut -d':' -f6`
+	checkshellvalid=`cat /etc/passwd | grep "$user" | cut -d':' -f7`
+	
+	if [ "$checkexists" != "" ] && [ "$checkhomeexists" != "" ] && [ "$checkshellvalid" == "/bin/bash" ]; then
+		info_msg "User: $user"
+		
+		user="$user"
+		destfolder="$checkhomeexists/.local/share/applications"
+	else
+		error_msg "Not a valid user!"
+	fi
+fi
+
+############
+
+status_msg "Generate desktop file information"
+
+if ($isterminal); then
+	terminal="true"
+else
+	terminal="false"
+fi
+
+if [ ! -e "$exec" ]; then
+	error_msg "Invalid exec file!"
+fi
+
+if [ ! -e "$icon" ]; then
+	error_msg "Invalid icon file!"
+fi
+
+############
+
+status_msg "Create desktop file"
+
+echo "[Desktop Entry]
+Name=$name
+Exec=$exec
+Terminal=$terminal
+Type=Application
+Icon=$icon
+StartupWMClass=$name
+Comment=$comment" > "$destfolder/$name.desktop"
+
+if [ "$user" != "root" ]; then
+	chown $user:$user "$destfolder/$name.desktop"
+fi
+
+############
+
+status_msg "Done"
+exit 0
