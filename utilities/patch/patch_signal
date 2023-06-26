@@ -1,0 +1,78 @@
+#!/bin/bash
+# root: y
+
+grey="\\e[1;90m"
+red="\\e[1;91m"
+green="\\e[1;92m"
+orange="\\e[1;93m"
+blue="\\e[1;94m"
+purple="\\e[1;95m"
+cyan="\\e[1;96m"
+white="\\e[1;97m"
+end="\\e[0;0m"
+
+############
+
+status_msg() {
+	echo -e "$blue""\n[~] $1""$end"
+}
+
+success_msg() {
+	echo -e "$green""$1""$end"
+}
+
+warning_msg() {
+	echo -e "$orange""$1""$end"
+}
+
+error_msg() {
+	echo -e "$red""$1""$end"
+	exit 1
+}
+
+############
+
+need_root() {
+	if [ "$UID" != "0" ]; then
+		error_msg "Root is needed!"
+	fi
+}
+
+need_root
+
+############
+
+status_msg "Patch desktop file"
+
+if [ -e /usr/share/applications/signal-desktop.desktop ]; then
+	echo '[Desktop Entry]
+Name=Signal
+Exec=/opt/Signal/signal-desktop --use-tray-icon %U
+Terminal=false
+Type=Application
+Icon=signal-desktop
+StartupWMClass=Signal
+Comment=Private messaging from your desktop
+MimeType=x-scheme-handler/sgnl;x-scheme-handler/signalcaptcha;
+Categories=Network;InstantMessaging;Chat;' > /usr/share/applications/signal-desktop.desktop
+
+	success_msg "File found.. Patch applied!"
+else
+	warning_msg "File not found! Patch not applied!"
+fi
+
+status_msg "Patch chrome-sandbox file"
+
+if [ -e /opt/Signal/chrome-sandbox ]; then
+	chown root:root /opt/Signal/chrome-sandbox
+	chmod 4755 /opt/Signal/chrome-sandbox
+	
+	success_msg "File found.. Patch applied!"
+else
+	warning_msg "File not found! Patch not applied!"
+fi
+
+############
+
+status_msg "Done"
+exit 0
